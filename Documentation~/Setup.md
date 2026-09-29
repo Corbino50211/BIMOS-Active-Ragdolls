@@ -154,21 +154,69 @@ normal)` is for impact effects. Custom guns can call `Ballistics.FireHitscan(...
 
 ### Knives, swords, spears: `BladeWeapon`
 
-Add it to the blade's Rigidbody (the BIMOS grabbable). Then:
+**Quick test:** **Tools → Active Ragdoll → Create Test Knife** makes a 30 cm knife with a Rigidbody, a
+`BladeWeapon` and, if BIMOS is installed, a BIMOS `Grab` on the handle. The Test Arena includes one. Without a
+headset, the Desktop Test Harness can throw knives (**V**) and twist (**Q**) or pull (**E**) the one you're
+looking at.
 
-- Create a child **Tip** transform at the point, and set **Blade Axis** (local, handle → tip) and **Blade Length**.
-- Optionally list the **Blade Colliders** (the edge) so slashes only count on the edge.
+**Your own knife:** put `BladeWeapon` on the knife's Rigidbody (or ArticulationBody) GameObject, the object BIMOS
+grabs. Then:
 
-Behaviour:
+- Create a child **Tip** transform at the point, and set **Blade Axis** (local, handle → tip) and **Blade Length**
+  (tip to guard; the blade can go in this far).
+- List the **Blade Colliders** (the sharp part). Colliders you leave out, such as the guard and handle, keep
+  colliding, so the guard physically stops the blade at the hilt. Slashes only count on blade colliders.
+- Give the Rigidbody **Continuous Dynamic** collision detection so fast stabs and throws don't tunnel.
+- Add a BIMOS grab to the handle. `BIMOSBlade` is added automatically at runtime.
 
-- **Stab**: the tip leads at ≥ 1.6 m/s within 35° of the blade axis. Deals stab damage plus a per-speed bonus.
-  If *Embed* is on, a sliding joint holds the blade in the body with friction. It travels deeper when pushed, can
-  drag the NPC around, pulls out when withdrawn, and tears out above *Embed Break Force*.
-- **Slash**: the edge moves sideways at ≥ 3 m/s.
-- **Blunt**: anything else hard enough (such as the pommel).
+#### How stabbing works
 
-Stab and slash use the tip velocity measured before the physics step. That's reliable even though the solver has
-already bounced the blade by the time the collision callback runs.
+1. **Getting in.** Only the tip stabs: the contact must be within *Tip Radius* of the tip. The blade must also
+   meet the surface within *Max Surface Angle* (65°) of head-on, or it glances off. Then either:
+   - it's moving along its own axis (within *Max Stab Angle*, 35°) faster than the surface's *Min Stab Speed*,
+     which is a stab or a throw; or
+   - it's pushed steadily along its axis harder than *Min Press Force*, which is leaning on the handle. This
+     lets you slowly push a knife into a pinned NPC.
+
+   The entry hole is where the blade line crosses the surface. The blade keeps *Entry Speed Kept* of its speed
+   and carries on in until friction stops it.
+2. **Staying in.** A ConfigurableJoint keeps the blade on the line of the wound. The blade can slide along the
+   line (between just outside the hole and the guard), spin about it, and lever a few degrees (*Swing Limit*),
+   but can't move sideways. The joint's drives are the friction: huge dampers capped at *Slide Friction* (N) and
+   *Twist Friction* (N·m). The solver holds the blade dead still until something pushes, pulls or turns it harder
+   than that, then lets it slide. Let go and it stays in. A shallow blade is held with only a quarter of the
+   friction, a fully buried one with all of it.
+3. **Working it.**
+   - **Push deeper:** cuts new tissue, *Cut Damage Per Meter*.
+   - **Saw back and forth:** *Saw Damage Per Meter*.
+   - **Twist or lever:** *Twist Damage Per Degree* plus pain. A quarter turn hurts a lot, and the NPC's limb
+     goes limp from the pain.
+
+   Twisting and levering also **loosen the wound** (*Wound Widening*). Friction drops and the blade gets more
+   side-to-side play, so a worked knife comes out more easily. Slow jitter while the NPC moves around with a
+   knife in it doesn't count.
+4. **Holding it.** While a BIMOS hand holds a blade stuck in a live NPC, that limb goes weak like a grabbed limb.
+   You can drag the NPC by the handle, twist its arm with the knife, or pin it. Wounds are blamed on you, so the
+   NPC aggroes on you. The controller buzzes: a thump going in, a grinding rumble while the blade slides or
+   twists, a pop coming out. Assign optional stab and extract sounds on `BIMOSBlade`.
+5. **Getting out.** Pull the tip back out past the entry hole and it comes free. Collisions with that body come
+   back once the blade is clear, so it isn't shoved out violently. Wrench it sideways past *Break Force* and it
+   tears out. It also comes out if the target is destroyed or disabled, and `Extract()` forces it out.
+
+Blades stick into ragdolls with **Flesh Material**, and into anything that isn't damageable with **World
+Material** (wood-like: needs a real stab, holds about 450 N, enough to hang from). Put a **Stabbable Surface** on
+an object to give it its own material, for example *Penetrable* off for metal. Blades never stick into the player
+(they only wound) or into BIMOS rig colliders. *Stick In World* turns off sticking into the environment.
+
+For VFX and SFX hooks: `Embedded`, `Extracted` (with an `ExtractReason`) and `Feedback` events, the Unity
+events, `Current` (the `Impalement`: depth, twist, looseness, held), and `Impalement.Active` / `CountIn(character)`.
+Any holder can implement `IBladeWielder` to get the same hold, blame and feedback behaviour as `BIMOSBlade`.
+
+**Tuning feel:**
+- Blade comes out too easily when you let go → raise *Slide Friction*.
+- Too hard to twist → lower *Twist Friction*. BIMOS hands are strong; the default 1.5 N·m is a firm wrist turn.
+- Hard to get in → lower *Min Stab Speed* or *Min Press Force*.
+- The NPC flails when you drag it → lower `JointMotorDriver → Grabbed Strength`, the same setting as hand grabs.
 
 ### Explosions
 

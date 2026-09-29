@@ -10,7 +10,8 @@ namespace ActiveRagdoll.Samples
     /// <see cref="CombatTarget"/> on team 0, so NPCs hunt it exactly as they would a BIMOS player.
     /// <para>
     /// WASD move · mouse look · LMB shoot · RMB shove · F stab (short-range thrust) · G grenade at crosshair ·
-    /// K kill all · R respawn all · T slow motion · Esc release cursor
+    /// V throw a knife (it sticks) · hold Q twist / E yank the knife you're looking at · K kill all · R respawn all ·
+    /// T slow motion · Esc release cursor
     /// </para>
     /// </summary>
     [DisallowMultipleComponent]
@@ -30,12 +31,18 @@ namespace ActiveRagdoll.Samples
         [SerializeField] private float _grenadeDamage = 80f;
         [SerializeField] private float _grenadeRadius = 3.5f;
         [SerializeField] private float _grenadeVelocity = 7f;
+        [SerializeField] private float _knifeThrowSpeed = 12f;
+        [Tooltip("Torque (N·m) Q applies about a stuck knife's blade, like a wrist turning it.")]
+        [SerializeField] private float _knifeTwistTorque = 3f;
+        [Tooltip("Force (N) E pulls a stuck knife out with.")]
+        [SerializeField] private float _knifeYankForce = 250f;
 
         private Camera _camera;
         private Rigidbody _body;
         private PlayerHealth _health;
         private float _pitch;
         private float _yaw;
+        private BladeWeapon _workedKnife;
         private bool _slowMotion;
         private string _lastEvent = "";
         private readonly List<(NPCStateMachine machine, Vector3 position, Quaternion rotation)> _spawns =
@@ -119,6 +126,15 @@ namespace ActiveRagdoll.Samples
 
             if (kb.fKey.wasPressedThisFrame) Stab();
             if (kb.gKey.wasPressedThisFrame) Grenade();
+            if (kb.vKey.wasPressedThisFrame) ThrowKnife();
+            if (kb.qKey.wasPressedThisFrame || kb.eKey.wasPressedThisFrame) PickKnife();
+            if ((kb.qKey.isPressed || kb.eKey.isPressed) && _workedKnife != null)
+            {
+                Impalement wound = _workedKnife.Current;
+                _lastEvent = wound != null
+                    ? $"Knife: depth {wound.Depth * 100f:0.0} cm, twisted {wound.TwistAngle:0}°, loose {wound.Looseness:P0}"
+                    : "Knife came out";
+            }
             if (kb.kKey.wasPressedThisFrame) KillAll();
             if (kb.rKey.wasPressedThisFrame) RespawnAll();
             if (kb.tKey.wasPressedThisFrame)
@@ -133,6 +149,7 @@ namespace ActiveRagdoll.Samples
             Keyboard kb = Keyboard.current;
             if (kb == null)
                 return;
+            WorkKnife(kb);
             Vector2 input = new Vector2(
                 (kb.dKey.isPressed ? 1f : 0f) - (kb.aKey.isPressed ? 1f : 0f),
                 (kb.wKey.isPressed ? 1f : 0f) - (kb.sKey.isPressed ? 1f : 0f));
@@ -171,6 +188,69 @@ namespace ActiveRagdoll.Samples
             Ray ray = AimRay();
             if (Ballistics.FireHitscan(ray.origin, ray.direction, 1.8f, ~0, transform, _stabDamage, _stabImpulse, gameObject, out RaycastHit hit, DamageType.Stab))
                 _lastEvent = $"Stabbed {Describe(hit.collider)}";
+        }
+
+        private void ThrowKnife()
+        {
+            Ray ray = AimRay();
+            var knife = new GameObject("Thrown Knife");
+            knife.transform.SetPositionAndRotation(ray.origin + ray.direction * 0.5f, Quaternion.LookRotation(ray.direction));
+            var body = knife.AddComponent<Rigidbody>();
+            body.mass = 0.25f;
+            body.interpolation = RigidbodyInterpolation.Interpolate;
+            body.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+            KnifePart(knife, new Vector3(0f, 0f, 0.055f), new Vector3(0.028f, 0.022f, 0.11f));
+            KnifePart(knife, new Vector3(0f, 0f, 0.115f), new Vector3(0.024f, 0.06f, 0.01f));
+            Collider blade = KnifePart(knife, new Vector3(0f, 0f, 0.21f), new Vector3(0.006f, 0.03f, 0.18f));
+            var tip = new GameObject("Tip").transform;
+            tip.SetParent(knife.transform, false);
+            tip.localPosition = new Vector3(0f, 0f, 0.3f);
+            knife.AddComponent<BladeWeapon>().Configure(tip, Vector3.forward, 0.18f, new[] { blade });
+            foreach (Collider c in GetComponentsInChildren<Collider>())
+                foreach (Collider k in knife.GetComponentsInChildren<Collider>())
+                    Physics.IgnoreCollision(c, k);
+            body.linearVelocity = ray.direction * _knifeThrowSpeed + _body.linearVelocity;
+            Destroy(knife, 60f);
+            _lastEvent = "Threw a knife";
+        }
+
+        private static Collider KnifePart(GameObject knife, Vector3 localPosition, Vector3 size)
+        {
+            GameObject part = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            part.transform.SetParent(knife.transform, false);
+            part.transform.localPosition = localPosition;
+            part.transform.localScale = size;
+            return part.GetComponent<Collider>();
+        }
+
+        /// <summary>Picks the stuck blade nearest the crosshair for Q (twist) / E (yank), what a hand would do in VR.</summary>
+        private void PickKnife()
+        {
+            Ray ray = AimRay();
+            _workedKnife = null;
+            float bestScore = 0.97f;
+            foreach (BladeWeapon blade in BladeWeapon.All)
+            {
+                if (!blade.IsEmbedded) continue;
+                Vector3 to = blade.transform.position - ray.origin;
+                float score = Vector3.Dot(to.normalized, ray.direction);
+                if (score > bestScore && to.magnitude < 6f) { bestScore = score; _workedKnife = blade; }
+            }
+            if (_workedKnife == null)
+                _lastEvent = "No stuck knife in view";
+        }
+
+        private void WorkKnife(Keyboard kb)
+        {
+            if (_workedKnife == null || !_workedKnife.IsEmbedded)
+                return;
+            Rigidbody body = _workedKnife.GetComponent<Rigidbody>();
+            if (body == null)
+                return;
+            if (kb.qKey.isPressed)
+                body.AddTorque(_workedKnife.BladeAxisWorld * _knifeTwistTorque);
+            if (kb.eKey.isPressed)
+                body.AddForce(-_workedKnife.BladeAxisWorld * _knifeYankForce);
         }
 
         private void Grenade()
@@ -213,6 +293,7 @@ namespace ActiveRagdoll.Samples
             GUILayout.BeginArea(new Rect(10f, 10f, 480f, 400f), GUI.skin.box);
             GUILayout.Label($"Health: {_health.CurrentHealth:0}/{_health.MaxHealth:0}{(_health.IsAlive ? "" : "  (DEAD - press R)")}");
             GUILayout.Label("WASD move · mouse look · LMB shoot · RMB shove · F stab · G grenade");
+            GUILayout.Label("V throw knife · hold Q twist / E yank the stuck knife you look at");
             GUILayout.Label("K kill all · R respawn all · T slow-mo · Esc cursor");
             GUILayout.Label(_lastEvent);
             foreach (ActiveRagdollCharacter c in ActiveRagdollCharacter.All)

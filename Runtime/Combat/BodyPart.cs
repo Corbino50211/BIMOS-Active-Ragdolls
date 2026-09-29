@@ -176,6 +176,9 @@ namespace ActiveRagdoll
                 DealStrikeDamage(collision, procedural);
 
             // Weapons compute their own damage; another character's active strike is dealt by its own fist.
+            ArticulationBody otherArticulation = other.attachedArticulationBody;
+            if (otherBody == null && otherArticulation != null && otherArticulation.TryGetComponent(out IImpactDamageDealer _))
+                return;
             if (otherBody != null)
             {
                 if (otherBody.TryGetComponent(out IImpactDamageDealer _))

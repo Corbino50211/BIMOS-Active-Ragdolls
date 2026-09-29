@@ -69,8 +69,8 @@ automatically.
 | `NPCStateMachine` | Idle / Walk / Attack / Stagger / Fallen / GettingUp / Dead. |
 | `NPCPerception`, `NPCNavigator` | Sight, FOV, line of sight, memory; NavMesh path following with direct-steer fallback and crowd separation. |
 | `CombatTarget`, `PlayerHealth` | What NPCs hunt, and a damageable player. |
-| `HitscanGun`, `BladeWeapon`, `Ballistics` | Bullets with recoil, stabs that embed and pull out, explosions. |
-| `BIMOSPlayerTarget`, `BIMOSPlayerHealth`, `BIMOSRagdollGrabs` | BIMOS integration: target the physics head and pelvis, block with your hands, grab any NPC limb. |
+| `HitscanGun`, `BladeWeapon`, `Ballistics` | Bullets with recoil, explosions, and Boneworks-style knives that stick in, stay in, twist and pull out (`Impalement`, `StabbableSurface`). |
+| `BIMOSPlayerTarget`, `BIMOSPlayerHealth`, `BIMOSRagdollGrabs`, `BIMOSBlade` | BIMOS integration: target the physics head and pelvis, block with your hands, grab any NPC limb, knife haptics and drag-by-the-handle. |
 | Editor | Ragdoll Builder (Humanoid → NPC), mannequin generator, layer setup, a validating inspector. |
 
 ## Documentation

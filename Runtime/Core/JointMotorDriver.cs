@@ -90,6 +90,7 @@ namespace ActiveRagdoll
         private float[] _appliedSpring = Array.Empty<float>();
         private float[] _appliedDamper = Array.Empty<float>();
         private bool[] _grabbed = Array.Empty<bool>();
+        private int[] _holds = Array.Empty<int>();
         private int[] _limb = Array.Empty<int>();
         private int _grabbedLimbMask;
         private bool _initialized;
@@ -134,13 +135,33 @@ namespace ActiveRagdoll
             RebuildGrabMask();
         }
 
-        public bool IsGrabbed(int boneIndex) => InRange(boneIndex) && _grabbed[boneIndex];
+        public bool IsGrabbed(int boneIndex) => InRange(boneIndex) && (_grabbed[boneIndex] || _holds[boneIndex] > 0);
+
+        /// <summary>
+        /// Reference-counted alternative to <see cref="SetGrabbed"/> for secondary holders (e.g. a held knife
+        /// impaled in the bone), so they don't clear a hand grab on the same bone. Pair with <see cref="RemoveHold"/>.
+        /// </summary>
+        public void AddHold(int boneIndex)
+        {
+            if (!InRange(boneIndex))
+                return;
+            _holds[boneIndex]++;
+            RebuildGrabMask();
+        }
+
+        public void RemoveHold(int boneIndex)
+        {
+            if (!InRange(boneIndex) || _holds[boneIndex] == 0)
+                return;
+            _holds[boneIndex]--;
+            RebuildGrabMask();
+        }
 
         /// <summary>True if any segment of this bone's limb is held.</summary>
         public bool IsLimbGrabbed(int boneIndex)
         {
             if (!InRange(boneIndex)) return false;
-            if (_grabbed[boneIndex]) return true;
+            if (_grabbed[boneIndex] || _holds[boneIndex] > 0) return true;
             int limb = _limb[boneIndex];
             return limb != 0 && (_grabbedLimbMask & (1 << limb)) != 0;
         }
@@ -209,6 +230,7 @@ namespace ActiveRagdoll
             _appliedSpring = new float[n];
             _appliedDamper = new float[n];
             _grabbed = new bool[n];
+            _holds = new int[n];
             _limb = new int[n];
 
             var stack = new int[n];
@@ -345,7 +367,7 @@ namespace ActiveRagdoll
         {
             int mask = 0;
             for (int i = 0; i < _grabbed.Length; i++)
-                if (_grabbed[i] && _limb[i] != 0)
+                if ((_grabbed[i] || _holds[i] > 0) && _limb[i] != 0)
                     mask |= 1 << _limb[i];
             _grabbedLimbMask = mask;
         }

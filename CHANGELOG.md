@@ -13,7 +13,13 @@
 - `ProceduralAnimator`: BIMOS-style stepping gait with capture-point recovery steps, guard/relaxed arms, physical
   strikes, lean, flinch, head look. `AnimatorParameterBridge` for clip-driven setups.
 - Combat: `BodyPart` hit detection, `RagdollHealth`, `PlayerHealth`, `CombatTarget`, `HitscanGun`,
-  `BladeWeapon` (stab/embed/extract, slash, blunt), `Ballistics` (hitscan, explosions).
+  `BladeWeapon` (stab, slash, blunt), `Ballistics` (hitscan, explosions).
+- Knife stabbing (`BladeWeapon`, `Impalement`, `StabMaterial`, `StabbableSurface`): blades stick into NPCs, the
+  world and props by speed or steady pressure. They stay in when let go, slide deeper and back out against
+  friction, and twist and lever in the wound, which loosens it and causes damage and pain. They drag whatever
+  they're stuck in and tear out when wrenched sideways. Works with Rigidbody and ArticulationBody blades.
+  `BIMOSBlade` (auto-added to grabbable blades) weakens the stabbed limb while held, blames wounds on the player
+  and adds controller haptics.
 - AI: `NPCStateMachine` (Idle, Walk, Attack, Stagger, Fallen, GettingUp, Dead), `NPCPerception`, `NPCNavigator`.
 - BIMOS 1.0.0 integration: `BIMOSPlayerTarget`, `BIMOSPlayerHealth` (hand blocking), `BIMOSRagdollGrabs`,
   automatic player bootstrap.
