@@ -32,6 +32,9 @@ Enforced on every ragdoll body at startup.
 | Linear / Angular Damping | 0.02 / 0.3 | Mild angular damping keeps limp limbs from spinning forever. |
 | Interpolation | Interpolate | Smooth rendering when the display rate (90 Hz) ≠ the physics rate (144 Hz). |
 | Fast Segment Collision Detection | Continuous Speculative | Hands, forearms and feet, so strikes don't tunnel. |
+| Adaptive CCD Speed | 6 m/s | Faster bodies switch to speculative CCD until they slow below half this, so flung ragdolls don't pass through thin walls or tables. 0 = off. |
+| Min Inertia Radius | 0.03 m | Floors each body's inertia at `mass × r²`. Very small inertias (hands, feet) jitter under strong drives. 0 = keep Unity's values. |
+| Corpse Sleep Threshold | 0.03 | Dead bodies go to sleep sooner, so they settle instead of twitching on the floor. They still wake when touched or grabbed. |
 | Self Collision | IgnoreNearby, depth 2 | See *Setup → Layers*. |
 
 ### Mass distribution (builder)
@@ -86,6 +89,10 @@ which the muscle stops getting stronger. That last value is what makes NPCs push
 | Hand | 12 | 0.8 | 40° | |
 | Leg | 30 | 0.9 | 60° | hip k ≈ 2250, knee k ≈ 340 |
 | Foot | 24 | 0.9 | 45° | |
+
+**Strength changes are rate-limited:** a muscle loses strength at up to 20/s, so hits and grabs take effect at once. It
+regains strength at up to 4/s (*Strength Recovery Rate*), so a released limb eases back into pose over about a
+quarter second instead of snapping. The strike boost is applied on top, unsmoothed, so punches stay instant.
 
 *Limp damping* 1.5 × I gives dead limbs joint friction, so corpses don't wobble like jelly. Drives are re-sent to
 PhysX only when they change by more than 2%.

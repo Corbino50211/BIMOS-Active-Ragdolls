@@ -47,6 +47,15 @@ namespace ActiveRagdoll
 
         public CollisionDetectionMode defaultCollisionDetection = CollisionDetectionMode.Discrete;
 
+        [Tooltip("Bodies faster than this (m/s) temporarily switch to speculative CCD, so a thrown or shot ragdoll doesn't pass through thin walls and tables. 0 = off.")]
+        [Min(0f)] public float adaptiveCcdSpeed = 6f;
+
+        [Tooltip("Smallest radius of gyration (m) a body's inertia is allowed. Very small inertias (hands, feet, fingers) jitter under strong joint drives; this floors them. 0 = keep Unity's computed inertia.")]
+        [Range(0f, 0.1f)] public float minInertiaRadius = 0.03f;
+
+        [Tooltip("Rigidbody sleep threshold for corpses. Higher than Unity's default (0.005) so bodies settle instead of twitching on the ground. They still wake when touched.")]
+        [Min(0f)] public float corpseSleepThreshold = 0.03f;
+
         public SelfCollisionMode selfCollision = SelfCollisionMode.IgnoreNearby;
 
         [Tooltip("With IgnoreNearby, bodies this many joints apart or closer never collide with each other.")]
@@ -64,6 +73,9 @@ namespace ActiveRagdoll
             linearDamping = Mathf.Max(0f, linearDamping);
             angularDamping = Mathf.Max(0f, angularDamping);
             selfCollisionIgnoreDepth = Mathf.Clamp(selfCollisionIgnoreDepth, 1, 4);
+            adaptiveCcdSpeed = Mathf.Max(0f, adaptiveCcdSpeed);
+            minInertiaRadius = Mathf.Clamp(minInertiaRadius, 0f, 0.1f);
+            corpseSleepThreshold = Mathf.Max(0f, corpseSleepThreshold);
         }
     }
 }

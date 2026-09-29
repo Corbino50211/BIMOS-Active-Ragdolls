@@ -264,6 +264,7 @@ namespace ActiveRagdoll
 
             if (_motors != null) _motors.OnKilled();
             if (_procedural != null) _procedural.OnKilled();
+            SetCorpseSleep(true);
             if (_locomotion != null) _locomotion.Stop();
 
             Died?.Invoke(this);
@@ -278,6 +279,7 @@ namespace ActiveRagdoll
 
             _isDead = false;
             _outOfWorld = false;
+            SetCorpseSleep(false);
             if (_animator != null && _animatorDisabledByDeath)
                 _animator.enabled = true;
             _animatorDisabledByDeath = false;
@@ -606,6 +608,8 @@ namespace ActiveRagdoll
 
             UpdateProfileBlend(dt);
             UpdateSleepState();
+            if ((_stepCounter & 3) == 0)
+                UpdateAdaptiveCcd();
 
             if (_isDead)
             {
@@ -774,6 +778,7 @@ namespace ActiveRagdoll
                 rb.angularDamping = _physics.angularDamping;
                 rb.interpolation = _physics.interpolation;
                 rb.collisionDetectionMode = IsFastSegment(b.role) ? _physics.fastSegmentCollisionDetection : _physics.defaultCollisionDetection;
+                FloorInertia(rb, _physics.minInertiaRadius);
 
                 var list = new List<Collider>(2);
                 foreach (Collider c in rb.GetComponentsInChildren<Collider>(true))
@@ -797,6 +802,54 @@ namespace ActiveRagdoll
                         j.rotationDriveMode = RotationDriveMode.Slerp;
                 }
             }
+        }
+
+        /// <summary>Raises any principal inertia below mass·r² to that floor (tiny inertias jitter under strong drives).</summary>
+        private static void FloorInertia(Rigidbody rb, float radius)
+        {
+            if (radius <= 0f || !(rb.mass > 0f))
+                return;
+            float floor = rb.mass * radius * radius;
+            Vector3 tensor = rb.inertiaTensor;
+            if (!RagdollMath.IsFinite(tensor) || (tensor.x >= floor && tensor.y >= floor && tensor.z >= floor))
+                return;
+            Quaternion rotation = rb.inertiaTensorRotation;
+            rb.inertiaTensor = Vector3.Max(tensor, new Vector3(floor, floor, floor));
+            rb.inertiaTensorRotation = rotation;
+        }
+
+        /// <summary>
+        /// Switches discrete bodies to speculative CCD while they move fast, and back once they slow down
+        /// (hysteresis at half the speed), so flung ragdolls don't tunnel without paying for CCD all the time.
+        /// </summary>
+        private void UpdateAdaptiveCcd()
+        {
+            float fast = _physics.adaptiveCcdSpeed;
+            if (fast <= 0f || _physics.defaultCollisionDetection != CollisionDetectionMode.Discrete)
+                return;
+            float fastSqr = fast * fast;
+            float slowSqr = fastSqr * 0.25f;
+            for (int i = 0; i < _bones.Count; i++)
+            {
+                RagdollBone b = _bones[i];
+                Rigidbody rb = b.body;
+                if (rb == null || IsFastSegment(b.role))
+                    continue;
+                float speedSqr = rb.linearVelocity.sqrMagnitude;
+                bool ccd = rb.collisionDetectionMode != CollisionDetectionMode.Discrete;
+                if (!ccd && speedSqr > fastSqr)
+                    rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+                else if (ccd && speedSqr < slowSqr)
+                    rb.collisionDetectionMode = CollisionDetectionMode.Discrete;
+            }
+        }
+
+        private void SetCorpseSleep(bool dead)
+        {
+            float threshold = dead ? _physics.corpseSleepThreshold : Physics.sleepThreshold;
+            for (int i = 0; i < _bones.Count; i++)
+                if (_bones[i].body != null)
+                    _bones[i].body.sleepThreshold = threshold;
         }
 
         private static bool IsFastSegment(BoneRole role)

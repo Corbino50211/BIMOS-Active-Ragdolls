@@ -67,6 +67,12 @@ namespace ActiveRagdoll
         [Tooltip("Fraction of pain that spreads to the parent and child joints.")]
         [SerializeField, Range(0f, 1f)] private float _painSpread = 0.45f;
 
+        [Header("Strength Changes")]
+        [Tooltip("How fast (per second) a muscle regains strength after pain, a grab or a profile change. Stops limbs snapping back the instant they're released.")]
+        [SerializeField, Min(0.1f)] private float _strengthRecoveryRate = 4f;
+        [Tooltip("How fast (per second) a muscle loses strength. High, so hits and grabs take effect at once.")]
+        [SerializeField, Min(0.1f)] private float _strengthLossRate = 20f;
+
         [Header("External Control")]
         [Tooltip("Strength multiplier for a limb that is being held (e.g. grabbed by a BIMOS hand), so the player can move it.")]
         [SerializeField, Range(0f, 1f)] private float _grabbedStrength = 0.25f;
@@ -88,6 +94,7 @@ namespace ActiveRagdoll
         private float[] _boost = Array.Empty<float>();
         private float[] _pinWeight = Array.Empty<float>();
         private float[] _appliedSpring = Array.Empty<float>();
+        private float[] _strength = Array.Empty<float>();
         private float[] _appliedDamper = Array.Empty<float>();
         private bool[] _grabbed = Array.Empty<bool>();
         private int[] _holds = Array.Empty<int>();
@@ -206,6 +213,7 @@ namespace ActiveRagdoll
                 _pain[i] = 0f;
                 _function[i] = 1f;
                 _appliedSpring[i] = -1f;
+                _strength[i] = -1f;
             }
             ClearOverrides();
         }
@@ -228,6 +236,7 @@ namespace ActiveRagdoll
             _boost = new float[n];
             _pinWeight = new float[n];
             _appliedSpring = new float[n];
+            _strength = new float[n];
             _appliedDamper = new float[n];
             _grabbed = new bool[n];
             _holds = new int[n];
@@ -240,6 +249,7 @@ namespace ActiveRagdoll
                 _function[i] = 1f;
                 _boost[i] = 1f;
                 _appliedSpring[i] = -1f;
+                _strength[i] = -1f;
                 _limb[i] = BoneRoles.GetLimbId(b.role);
                 if (b.joint == null || b.parentIndex < 0)
                     continue;
@@ -290,11 +300,20 @@ namespace ActiveRagdoll
                 ConfigurableJoint joint = b.joint;
                 if (joint != null && b.parentIndex >= 0)
                 {
-                    float s = muscle * Mathf.Max(0f, b.muscleMultiplier) * _function[i] * _boost[i] * (1f - _pain[i] * _painWeakening);
+                    float s = muscle * Mathf.Max(0f, b.muscleMultiplier) * _function[i] * (1f - _pain[i] * _painWeakening);
                     if (IsLimbGrabbed(i))
                         s *= _grabbedStrength;
                     if (!(s > 0f))
                         s = 0f;
+
+                    // Lose strength fast, regain it gradually. Strike boost is applied after, so punches stay snappy.
+                    float current = _strength[i];
+                    if (current >= 0f)
+                        s = s < current
+                            ? Mathf.Max(s, current - _strengthLossRate * dt)
+                            : Mathf.Min(s, current + _strengthRecoveryRate * dt);
+                    _strength[i] = s;
+                    s *= _boost[i];
 
                     MuscleTuning t = GetTuning(b.role);
                     float inertia = _inertia[i];
