@@ -27,7 +27,7 @@ namespace ActiveRagdoll
         {
             NPCPerception perception = Machine.Perception;
             CombatTarget target = perception != null ? perception.Target : null;
-            if (target == null || !perception.HasTarget)
+            if (target == null || !perception.HasTarget || !Machine.IsAggressive)
             {
                 Machine.ChangeState(NPCStateId.Idle);
                 return;

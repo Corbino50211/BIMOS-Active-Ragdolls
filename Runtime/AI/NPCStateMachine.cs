@@ -4,6 +4,19 @@ using UnityEngine.Events;
 
 namespace ActiveRagdoll
 {
+    /// <summary>How an NPC treats hostiles it perceives.</summary>
+    public enum NPCDisposition
+    {
+        /// <summary>Stands in place. Fights only when attacked (if Retaliate When Attacked is on).</summary>
+        Idle = 0,
+
+        /// <summary>Strolls around its home point. Fights only when attacked (if Retaliate When Attacked is on).</summary>
+        Wander = 1,
+
+        /// <summary>Hunts any hostile it perceives.</summary>
+        Hostile = 2,
+    }
+
     public enum NPCStateId
     {
         Idle = 0,
@@ -105,6 +118,29 @@ namespace ActiveRagdoll
             public bool destroyOnExpire = true;
         }
 
+        [Serializable]
+        public sealed class WanderSettings
+        {
+            [Tooltip("How far (m) from its home point the NPC strolls.")]
+            [Min(0.5f)] public float radius = 6f;
+            [Tooltip("Walking speed as a fraction of Locomotion Walk Speed.")]
+            [Range(0.2f, 1f)] public float speedFactor = 0.6f;
+            [Min(0f)] public float pauseMin = 2f;
+            [Min(0f)] public float pauseMax = 6f;
+            [Tooltip("Give up on a wander point after this many seconds (blocked or unreachable).")]
+            [Min(1f)] public float giveUpTime = 12f;
+        }
+
+        [Header("Behaviour")]
+        [Tooltip("Idle: stands still. Wander: strolls around. Hostile: hunts any hostile it sees.")]
+        [SerializeField] private NPCDisposition _disposition = NPCDisposition.Hostile;
+
+        [Tooltip("Idle/Wander only. On: fights back when hurt or grabbed, then calms down once it loses the attacker. " +
+                 "Off: never fights; after reacting physically it goes back to what it was doing.")]
+        [SerializeField] private bool _retaliateWhenAttacked = true;
+
+        [SerializeField] private WanderSettings _wander = new WanderSettings();
+
         [SerializeField] private StateProfiles _profiles = new StateProfiles();
         [SerializeField] private ChaseSettings _chase = new ChaseSettings();
         [SerializeField] private AttackSettings _attack = new AttackSettings();
@@ -128,6 +164,7 @@ namespace ActiveRagdoll
         private BodySide _lastStrikeSide = BodySide.Center;
         private float _pendingStaggerSeverity;
         private Vector3 _pendingStaggerDirection;
+        private bool _provoked;
 
         // ------------------------------------------------------------------ Accessors used by states
 
@@ -140,6 +177,39 @@ namespace ActiveRagdoll
         public NPCNavigator Navigator { get; private set; }
         public AnimatorParameterBridge AnimatorBridge { get; private set; }
 
+        /// <summary>Idle / Wander / Hostile. Can be changed at runtime.</summary>
+        public NPCDisposition Disposition
+        {
+            get => _disposition;
+            set
+            {
+                _disposition = value;
+                if (value == NPCDisposition.Hostile)
+                    _provoked = false;
+            }
+        }
+
+        public bool RetaliateWhenAttacked
+        {
+            get => _retaliateWhenAttacked;
+            set
+            {
+                _retaliateWhenAttacked = value;
+                if (!value)
+                    _provoked = false;
+            }
+        }
+
+        /// <summary>True when the NPC will chase and fight: Hostile, or provoked while Idle/Wander.</summary>
+        public bool IsAggressive => _disposition == NPCDisposition.Hostile || _provoked;
+
+        /// <summary>Idle/Wander NPC that has been attacked and is fighting back.</summary>
+        public bool IsProvoked => _provoked;
+
+        /// <summary>Centre of the wander area (spawn point by default).</summary>
+        public Vector3 HomePosition { get; set; }
+
+        public WanderSettings Wander => _wander;
         public StateProfiles Profiles => _profiles;
         public ChaseSettings Chase => _chase;
         public AttackSettings Attack => _attack;
@@ -175,6 +245,8 @@ namespace ActiveRagdoll
                 Perception.enabled = true;
                 Perception.ForgetTarget();
             }
+            HomePosition = groundPosition;
+            _provoked = false;
             GetUpAttempts = 0;
             _nextAttackTime = 0f;
             ChangeState(NPCStateId.Idle, true);
@@ -183,7 +255,23 @@ namespace ActiveRagdoll
         /// <summary>Returns to the natural behaviour for the current situation (chase if there is a target, else idle).</summary>
         public void ResumeBehaviour()
         {
-            ChangeState(Perception != null && Perception.HasTarget ? NPCStateId.Walk : NPCStateId.Idle);
+            ChangeState(ShouldEngage ? NPCStateId.Walk : NPCStateId.Idle);
+        }
+
+        /// <summary>Aggressive and has someone to fight.</summary>
+        internal bool ShouldEngage => IsAggressive && Perception != null && Perception.HasTarget;
+
+        /// <summary>A provoked Idle/Wander NPC calms down once it has lost its attacker.</summary>
+        internal void CalmDownIfTargetLost()
+        {
+            if (_provoked && (Perception == null || !Perception.HasTarget))
+                _provoked = false;
+        }
+
+        private void OnAttacked(CombatTarget attacker)
+        {
+            if (_disposition != NPCDisposition.Hostile && _retaliateWhenAttacked && CurrentState != NPCStateId.Dead)
+                _provoked = true;
         }
 
         // ------------------------------------------------------------------ Lifecycle
@@ -225,6 +313,9 @@ namespace ActiveRagdoll
 
             Character.Died += OnCharacterDied;
             Character.HitReceived += OnHit;
+            if (Perception != null)
+                Perception.Attacked += OnAttacked;
+            HomePosition = Character.Position - Vector3.up * Character.StandingPelvisHeight;
             if (Balance != null)
             {
                 Balance.BalanceLost += OnBalanceLost;
@@ -242,6 +333,8 @@ namespace ActiveRagdoll
                 Character.Died -= OnCharacterDied;
                 Character.HitReceived -= OnHit;
             }
+            if (Perception != null)
+                Perception.Attacked -= OnAttacked;
             if (Balance != null)
             {
                 Balance.BalanceLost -= OnBalanceLost;
@@ -255,6 +348,9 @@ namespace ActiveRagdoll
                 return;
             float dt = Time.deltaTime;
             StateTime += dt;
+            // Settings may be changed from the inspector at runtime.
+            if (_provoked && (_disposition == NPCDisposition.Hostile || !_retaliateWhenAttacked))
+                _provoked = false;
             _current.Tick(dt);
         }
 
@@ -461,6 +557,8 @@ namespace ActiveRagdoll
             _attack ??= new AttackSettings();
             _reactions ??= new ReactionSettings();
             _corpse ??= new CorpseSettings();
+            _wander ??= new WanderSettings();
+            _wander.pauseMax = Mathf.Max(_wander.pauseMax, _wander.pauseMin);
             _attack.cooldownMax = Mathf.Max(_attack.cooldownMax, _attack.cooldownMin);
             _reactions.staggerDurationMax = Mathf.Max(_reactions.staggerDurationMax, _reactions.staggerDurationMin);
         }

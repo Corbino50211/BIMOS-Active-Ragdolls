@@ -183,7 +183,24 @@ being thrown into a wall, never on normal falls. To give a weapon its own damage
 `IImpactDamageDealer` on its Rigidbody (body parts then skip their generic impact damage) and call
 `ApplyDamage` yourself.
 
-## 6. Navigation
+## 6. Disposition (Idle / Wander / Hostile)
+
+Set on `NPCStateMachine` (also settable from code: `Disposition`, `RetaliateWhenAttacked`):
+
+| Disposition | Behaviour |
+|---|---|
+| **Idle** | Stands in place and looks at people it can see. |
+| **Wander** | Strolls between random points within *Wander → Radius* of where it spawned, pausing 2–6 s at each. Uses the NavMesh when there is one. |
+| **Hostile** | Hunts any hostile it perceives: chases, then attacks when in range. The default. |
+
+**Hostile When Attacked** (Idle/Wander only):
+
+- **On**: being hurt or grabbed provokes the NPC. It fights back like a Hostile NPC, then calms down and goes back
+  to idling or wandering once it has lost track of its attacker (perception memory plus search time).
+- **Off**: it never fights. Hits still stagger it or knock it down physically, and afterwards it gets up and
+  carries on with what it was doing.
+
+## 7. Navigation
 
 `NPCNavigator` steers in three layers:
 
@@ -203,7 +220,7 @@ props a `NavMeshObstacle` with *Carve* enabled so the mesh follows them. Local a
 updates. Select an NPC in play mode to see its path (blue), its current corner, and a magenta ring while it
 detours.
 
-## 7. Animation clips (optional)
+## 8. Animation clips (optional)
 
 The procedural layer works without clips. To add animation:
 
@@ -217,7 +234,7 @@ The procedural layer works without clips. To add animation:
 3. The Animator's update mode is forced to *Normal*, and root motion is forced off. The physical body is the only
    thing that moves the character.
 
-## 8. Spawning, pooling and despawning
+## 9. Spawning, pooling and despawning
 
 - **Spawn** prefabs normally. Joints capture their reference pose on `Awake`, so the prefab must be saved in its
   rest pose (the builder does this).

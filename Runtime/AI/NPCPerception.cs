@@ -78,7 +78,11 @@ namespace ActiveRagdoll
             _lastSeenTime = Time.time;
             _lastKnownPosition = attacker.CenterPoint;
             _lastKnownAimPoint = attacker.AimPoint;
+            Attacked?.Invoke(attacker);
         }
+
+        /// <summary>Raised when this NPC is hurt or grabbed by a hostile (after the attacker becomes the target).</summary>
+        public event System.Action<CombatTarget> Attacked;
 
         private void Update()
         {
