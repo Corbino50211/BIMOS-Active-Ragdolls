@@ -1162,7 +1162,7 @@ namespace ActiveRagdoll
             float maxSpeedSqr = _maxBodySpeed * _maxBodySpeed;
             if (!RagdollMath.IsFinite(pos) || !RagdollMath.IsFinite(vel) || vel.sqrMagnitude > maxSpeedSqr)
             {
-                RecoverFromFault("pelvis state is invalid (NaN or runaway velocity)");
+                RecoverFromFault(DescribeFault("Pelvis", pos, vel));
                 return false;
             }
 
@@ -1177,7 +1177,7 @@ namespace ActiveRagdoll
                     Vector3 v = rb.linearVelocity;
                     if (!RagdollMath.IsFinite(rb.position) || !RagdollMath.IsFinite(v) || v.sqrMagnitude > maxSpeedSqr)
                     {
-                        RecoverFromFault($"{_bones[i].role} state is invalid (NaN or runaway velocity)");
+                        RecoverFromFault(DescribeFault(_bones[i].role.ToString(), rb.position, v));
                         return false;
                     }
                 }
@@ -1192,6 +1192,17 @@ namespace ActiveRagdoll
             _lastValidGroundPosition = CurrentGroundPosition();
             _lastValidYaw = _lastBodyYaw;
             return true;
+        }
+
+        private string DescribeFault(string body, Vector3 position, Vector3 velocity)
+        {
+            if (!RagdollMath.IsFinite(position))
+                return $"{body} position became NaN/Infinity";
+            if (!RagdollMath.IsFinite(velocity))
+                return $"{body} velocity became NaN/Infinity";
+            NPCStateMachine machine = GetComponent<NPCStateMachine>();
+            string state = machine != null ? $", state {machine.CurrentState}" : string.Empty;
+            return $"{body} moving at {velocity.magnitude:0} m/s (limit {_maxBodySpeed:0}) near {position}{state} — usually an overlapping collider, a huge external force, or a joint fighting a grab";
         }
 
         private void RecoverFromFault(string reason)

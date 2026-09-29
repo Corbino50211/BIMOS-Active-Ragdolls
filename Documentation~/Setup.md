@@ -183,7 +183,27 @@ being thrown into a wall, never on normal falls. To give a weapon its own damage
 `IImpactDamageDealer` on its Rigidbody (body parts then skip their generic impact damage) and call
 `ApplyDamage` yourself.
 
-## 6. Animation clips (optional)
+## 6. Navigation
+
+`NPCNavigator` steers in three layers:
+
+1. **NavMesh path.** Bake a NavMesh with a `NavMeshSurface` (AI Navigation package). Start and goal are sampled
+   from the floor under the NPC and the target within *Sample Distance* (3 m). So if you stand in the clearance
+   hole next to a table, the NPC still gets a path to the nearest reachable point and then closes in. An NPC
+   knocked off the mesh walks back onto it first.
+2. **Local avoidance.** Hip- and knee-height sphere probes (*Probe Distance* 1.2 m) steer around anything the
+   NavMesh doesn't know about: props that have been moved, or everything when no NavMesh exists. The current
+   target, other characters (crowd separation handles those) and dynamic props under *Min Obstacle Mass* (5 kg)
+   are ignored, so NPCs shove small props aside.
+3. **Stuck recovery.** With no progress (*Stuck Distance* 0.3 m in *Stuck Time* 1.5 s), the NPC detours toward the
+   clearer side for 1.2 s and repaths.
+
+**Movable props** (BIMOS tables, crates) baked into a static NavMesh leave a stale hole when pushed. Give heavy
+props a `NavMeshObstacle` with *Carve* enabled so the mesh follows them. Local avoidance covers the gap until it
+updates. Select an NPC in play mode to see its path (blue), its current corner, and a magenta ring while it
+detours.
+
+## 7. Animation clips (optional)
 
 The procedural layer works without clips. To add animation:
 
@@ -197,7 +217,7 @@ The procedural layer works without clips. To add animation:
 3. The Animator's update mode is forced to *Normal*, and root motion is forced off. The physical body is the only
    thing that moves the character.
 
-## 7. Spawning, pooling and despawning
+## 8. Spawning, pooling and despawning
 
 - **Spawn** prefabs normally. Joints capture their reference pose on `Awake`, so the prefab must be saved in its
   rest pose (the builder does this).

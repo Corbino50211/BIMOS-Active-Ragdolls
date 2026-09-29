@@ -53,27 +53,34 @@ namespace ActiveRagdoll
 
             Vector3 from = Character.Position;
             Vector3 steer = toGoal.sqrMagnitude > 1e-6f ? toGoal / distance : Vector3.zero;
-            if (Machine.Navigator != null)
+            float travel = distance;
+            NPCNavigator navigator = Machine.Navigator;
+            if (navigator != null)
             {
-                Machine.Navigator.SetDestination(goal);
-                Vector3 path = Machine.Navigator.GetSteeringDirection(from);
+                navigator.SetIgnoredRoot(target.transform);
+                navigator.SetDestination(goal);
+                Vector3 path = navigator.GetSteeringDirection(from);
                 if (path.sqrMagnitude > 0f)
                     steer = path;
+                // Around an obstacle the path is longer than the straight line: don't slow down early.
+                travel = Mathf.Max(distance, navigator.RemainingDistance(from));
             }
 
             float speed = 0f;
             if (Machine.HasLocomotion)
             {
                 LocomotionController locomotion = Machine.Locomotion;
-                speed = distance > chase.runDistance ? locomotion.RunSpeed : locomotion.WalkSpeed;
+                speed = travel > chase.runDistance ? locomotion.RunSpeed : locomotion.WalkSpeed;
                 float stop = visible ? chase.stopDistance : 0.3f;
-                speed *= Mathf.Clamp01((distance - stop) / chase.slowRadius);
+                speed *= Mathf.Clamp01((travel - stop) / chase.slowRadius);
             }
 
-            Vector3 separation = Machine.Navigator != null
-                ? Machine.Navigator.ComputeSeparation(from, Character) * chase.separationWeight
+            Vector3 separation = navigator != null
+                ? navigator.ComputeSeparation(from, Character) * chase.separationWeight
                 : Vector3.zero;
-            Vector3 facing = visible && distance < chase.faceTargetDistance ? toGoal : Vector3.zero;
+            // Face the target only when the route heads roughly toward it; otherwise face along the detour.
+            bool pathTowardTarget = Vector3.Angle(steer, toGoal) < 50f;
+            Vector3 facing = visible && distance < chase.faceTargetDistance && pathTowardTarget ? toGoal : Vector3.zero;
             SetMovement(steer * speed + separation, facing);
 
             if (visible)
