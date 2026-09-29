@@ -123,14 +123,20 @@ namespace ActiveRagdoll
             public bool armWhenCalm = true;
             [Tooltip("Skip a weapon that is this much further (m) away than the enemy.")]
             [Min(0f)] public float maxDetour = 3f;
+            [Tooltip("Give up walking to a weapon after this many seconds.")]
             [Min(0f)] public float equipTimeout = 10f;
+            [Tooltip("Once the NPC is this close (m) to a weapon, it snaps into its hand.")]
+            [Min(0.3f)] public float pickupRange = 1.5f;
             [Tooltip("Back away from enemies closer than this (m) while shooting.")]
             [Min(0f)] public float minShootDistance = 1.5f;
+            [Tooltip("Reaction time (s) before the first shot at a target.")]
             [Min(0f)] public float firstShotDelay = 0.4f;
-            [Min(1)] public int burstMin = 1;
-            [Min(1)] public int burstMax = 3;
-            [Min(0f)] public float burstPauseMin = 0.5f;
-            [Min(0f)] public float burstPauseMax = 1.3f;
+            [Tooltip("Chance (0..1) each shot is aim-assisted onto the target. The rest are near misses.")]
+            [Range(0f, 1f)] public float hitChance = 0.5f;
+            [Tooltip("How far (m) from the target missed shots pass.")]
+            [Min(0f)] public float missDistance = 0.8f;
+            [Tooltip("Only shoot while the physical gun points within this many degrees of the target, so shots never leave the barrel sideways.")]
+            [Range(5f, 90f)] public float maxAimError = 40f;
         }
 
         [Serializable]

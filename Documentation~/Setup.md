@@ -258,17 +258,18 @@ rounds and then drop the empty gun.
   seen you (*Arm When Calm*).
 - In a fight they only detour for a weapon if it's no more than *Max Detour* (3 m) further than you. If you're
   within 2.5 m, they fight with fists instead.
-- **Equip:** walk to the weapon, crouch and lean, reach, and grip it with the physical hand (a FixedJoint to the
-  gun's Rigidbody or ArticulationBody).
-- **Shoot:** the arm muscles aim the physical gun, and the NPC fires in bursts only when the real muzzle is on
-  target (*Aim Tolerance*). Recoil, hits and shoves spoil the aim. It backs off if you get within 1.5 m, and moves to
-  regain line of sight.
+- **Equip:** walk to the weapon at full speed. Within *Pickup Range* (1.5 m) it snaps into the hand, held by a
+  FixedJoint to the gun's Rigidbody or ArticulationBody.
+- **Shoot:** the arm muscles point the physical gun at you, and the NPC fires steadily at the gun's *NPC Fire
+  Interval*, with no bursts, pauses or reloads. It waits *First Shot Delay* (0.4 s) to react first. **Aim
+  assist:** each shot has *Hit Chance* (50%) of going straight at your body; the rest pass about *Miss Distance*
+  (0.8 m) wide. Shots only fire while the real gun points within *Max Aim Error* (40°) of you, so bullets never
+  leave the side of the barrel. It backs off if you get within 1.5 m, and moves to regain line of sight.
 - **Disarm:** grab the gun in an NPC's hand and it lets go after 0.3 s. NPCs drop guns when they die, and sometimes
   when knocked down (35%).
 
 **Your own guns:** add `HitscanGun` (or derive from `NPCWeapon` and implement `NPCFire`). Set **Muzzle** and
-optionally **Grip** (where the palm goes; defaults to a child named `Grip`), plus Range, NPC Fire Interval and Aim
-Tolerance. Disable *Use Weapons* on an NPC to keep it fists-only.
+optionally **Grip** (where the palm goes; defaults to a child named `Grip`), plus Range and NPC Fire Interval. Disable *Use Weapons* on an NPC to keep it fists-only.
 
 ## 6. Disposition (Idle / Wander / Hostile)
 

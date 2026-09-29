@@ -53,10 +53,10 @@ namespace ActiveRagdoll
         [Tooltip("Maximum range (m) at which NPCs will shoot with it.")]
         [SerializeField, Min(0.1f)] private float _range = 30f;
 
-        [Tooltip("Seconds between NPC shots within a burst.")]
+        [Tooltip("Seconds between NPC shots.")]
         [SerializeField, Min(0.02f)] private float _npcFireInterval = 0.35f;
 
-        [Tooltip("NPCs fire when the muzzle points within this many degrees of the target.")]
+        [Tooltip("How closely (degrees) the arm aims the muzzle before the NPC is considered on target.")]
         [SerializeField, Range(0.5f, 30f)] private float _aimTolerance = 5f;
 
         private Transform _defaultGrip;
@@ -94,6 +94,30 @@ namespace ActiveRagdoll
         /// <summary>Fires one shot for an NPC. <paramref name="shooter"/> is the NPC (for damage attribution).</summary>
         public abstract bool NPCFire(GameObject shooter);
 
+        /// <summary>
+        /// Fires one NPC shot straight at <paramref name="point"/> (aim assist): the muzzle is pointed at it
+        /// for the duration of the shot only, so the gun's own firing code, effects and recoil are used.
+        /// </summary>
+        public bool NPCFireAt(GameObject shooter, Vector3 point)
+        {
+            Transform muzzle = Muzzle;
+            Vector3 direction = muzzle != null ? point - muzzle.position : Vector3.zero;
+            if (muzzle == null || direction.sqrMagnitude < 1e-4f
+                || muzzle.GetComponent<Rigidbody>() != null || muzzle.GetComponent<ArticulationBody>() != null)
+                return NPCFire(shooter);
+
+            Quaternion saved = muzzle.rotation;
+            muzzle.rotation = Quaternion.LookRotation(direction, muzzle.up);
+            try
+            {
+                return NPCFire(shooter);
+            }
+            finally
+            {
+                muzzle.rotation = saved;
+            }
+        }
+
         protected virtual void Awake()
         {
             ResolveBodies();
@@ -112,6 +136,14 @@ namespace ActiveRagdoll
             else
             {
                 Rigidbody = GetComponentInParent<Rigidbody>();
+            }
+
+            if (_muzzle == null)
+            {
+                // A separate marker, so aim assist can turn it without turning the gun itself.
+                var marker = new GameObject("NPC Muzzle (auto)");
+                marker.transform.SetParent(transform, false);
+                _muzzle = marker.transform;
             }
 
             if (_grip == null)
