@@ -1,0 +1,114 @@
+using System;
+using System.IO;
+using UnityEditor;
+using UnityEngine;
+
+namespace ActiveRagdoll.EditorTools
+{
+    /// <summary>
+    /// The BIMOS demo pistol lives in the imported BIMOS samples, which a package can't reference. When the
+    /// samples are present, this generates two small scripts into the project that let NPCs use the demo
+    /// pistol and make its shots damage NPCs (and NPC shots damage the player).
+    /// </summary>
+    [InitializeOnLoad]
+    internal static class BIMOSDemoWeaponInstaller
+    {
+        private const string MenuPath = "Tools/Active Ragdoll/Install BIMOS Demo Weapon Support";
+        private const string OutputFolder = "Assets/ActiveRagdoll Generated/BIMOS Demo Weapons";
+        private const string BridgeTypeName = "ActiveRagdoll.BIMOSDemo.BIMOSDemoDamageBridge";
+        private static readonly string[] Templates = { "BIMOSDemoDamageBridge", "BIMOSDemoPistolWeapon" };
+
+        private static string DeclinedKey => "ActiveRagdoll.BIMOSDemoWeapons.Declined." + Application.dataPath.GetHashCode();
+
+        static BIMOSDemoWeaponInstaller()
+        {
+            EditorApplication.delayCall += OfferInstall;
+        }
+
+        private static bool SamplesPresent => FindType("BIMOS.Samples.Pistol") != null && FindType("BIMOS.Samples.IDamageable") != null;
+
+        private static bool Installed => FindType(BridgeTypeName) != null || File.Exists(Path.Combine(OutputFolder, Templates[0] + ".cs"));
+
+        private static void OfferInstall()
+        {
+            if (Application.isBatchMode || EditorApplication.isPlayingOrWillChangePlaymode)
+                return;
+            if (!SamplesPresent || Installed || EditorPrefs.GetBool(DeclinedKey, false))
+                return;
+
+            int choice = EditorUtility.DisplayDialogComplex("BIMOS Active Ragdolls",
+                "The BIMOS demo samples are in this project.\n\n" +
+                "Install BIMOS demo weapon support? It generates two small scripts in\n'" + OutputFolder + "' so that:\n" +
+                "• NPCs pick up and fire the demo Pistol\n" +
+                "• your demo Pistol shots damage NPCs\n" +
+                "• NPC shots damage you (with BIMOSPlayerHealth)\n\n" +
+                "You can do this later from " + MenuPath.Replace("/", " > ") + ".",
+                "Install", "Not now", "Don't ask again");
+            if (choice == 0)
+                Install();
+            else if (choice == 2)
+                EditorPrefs.SetBool(DeclinedKey, true);
+        }
+
+        [MenuItem(MenuPath, priority = 30)]
+        private static void InstallFromMenu()
+        {
+            if (!SamplesPresent)
+            {
+                EditorUtility.DisplayDialog("BIMOS Active Ragdolls",
+                    "BIMOS demo samples not found (BIMOS.Samples.Pistol). Import the BIMOS Demo sample first.", "OK");
+                return;
+            }
+            Install();
+        }
+
+        private static void Install()
+        {
+            string templateFolder = FindTemplateFolder();
+            if (templateFolder == null)
+            {
+                Debug.LogError($"{ActiveRagdollCharacter.LogPrefix} Could not find the weapon bridge templates in the package.");
+                return;
+            }
+
+            Directory.CreateDirectory(OutputFolder);
+            foreach (string name in Templates)
+            {
+                string source = Path.Combine(templateFolder, name + ".cs.txt");
+                File.WriteAllText(Path.Combine(OutputFolder, name + ".cs"), File.ReadAllText(source));
+            }
+            AssetDatabase.Refresh();
+            Debug.Log($"{ActiveRagdollCharacter.LogPrefix} Installed BIMOS demo weapon support in '{OutputFolder}'. NPCs can now pick up and fire demo pistols.");
+        }
+
+        private static string FindTemplateFolder()
+        {
+            var package = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(BIMOSDemoWeaponInstaller).Assembly);
+            if (package != null)
+            {
+                string path = Path.Combine(package.resolvedPath, "Editor", "Templates");
+                if (File.Exists(Path.Combine(path, Templates[0] + ".cs.txt")))
+                    return path;
+            }
+
+            foreach (string guid in AssetDatabase.FindAssets(Templates[0] + ".cs"))
+            {
+                string assetPath = AssetDatabase.GUIDToAssetPath(guid);
+                if (assetPath.EndsWith(".cs.txt", StringComparison.Ordinal))
+                    return Path.GetDirectoryName(Path.GetFullPath(assetPath));
+            }
+            return null;
+        }
+
+        private static Type FindType(string fullName)
+        {
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                Type t = assembly.GetType(fullName, false);
+                if (t != null)
+                    return t;
+            }
+            return null;
+        }
+    }
+}

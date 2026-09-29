@@ -21,14 +21,15 @@ namespace ActiveRagdoll
         /// </summary>
         /// <param name="impulse">Knock-back (N·s). Real bullets carry ~4 N·s; games usually exaggerate to 8–15.</param>
         public static bool FireHitscan(Vector3 origin, Vector3 direction, float range, int layerMask, Transform ignoreRoot,
-            float damage, float impulse, GameObject source, out RaycastHit hit, DamageType type = DamageType.Bullet)
+            float damage, float impulse, GameObject source, out RaycastHit hit, DamageType type = DamageType.Bullet,
+            ActiveRagdollCharacter ignoreCharacter = null)
         {
             hit = default;
             if (direction.sqrMagnitude < 1e-10f || !RagdollMath.IsFinite(origin) || !RagdollMath.IsFinite(direction))
                 return false;
 
             Vector3 dir = direction.normalized;
-            if (!PhysicsQuery.Raycast(origin, dir, range, layerMask, null, ignoreRoot, out hit))
+            if (!PhysicsQuery.Raycast(origin, dir, range, layerMask, ignoreCharacter, ignoreRoot, out hit))
                 return false;
 
             Vector3 impulseVector = dir * impulse;

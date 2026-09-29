@@ -197,6 +197,7 @@ namespace ActiveRagdoll.EditorTools
                 Undo.AddComponent<NPCPerception>(npc);
                 Undo.AddComponent<NPCNavigator>(npc);
                 Undo.AddComponent<NPCStateMachine>(npc);
+                Undo.AddComponent<NPCWeaponHolder>(npc);
             }
 
             if (options.addBIMOSGrabs)

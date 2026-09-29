@@ -30,6 +30,7 @@ namespace ActiveRagdoll
         {
             s_active.Clear();
             s_lastDiscovery = float.NegativeInfinity;
+            Registered = null;
         }
 
         /// <summary>Asks the registered integration to look for new targets (rate limited).</summary>
@@ -96,10 +97,14 @@ namespace ActiveRagdoll
             SetPoints(aimPoint, centerPoint, velocitySource);
         }
 
+        /// <summary>Raised whenever a target is enabled. Integrations hook in here.</summary>
+        public static event System.Action<CombatTarget> Registered;
+
         protected virtual void OnEnable()
         {
             if (!s_active.Contains(this))
                 s_active.Add(this);
+            Registered?.Invoke(this);
         }
 
         protected virtual void OnDisable()

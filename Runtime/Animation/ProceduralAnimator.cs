@@ -186,6 +186,13 @@ namespace ActiveRagdoll
         private BodySide _overrideSide = BodySide.Center;
         private readonly List<Object> _strikeHits = new List<Object>(4);
 
+        // Arm aim overrides (weapons, reaching)
+        private readonly bool[] _armAim = new bool[2];
+        private readonly Vector3[] _armAimWrist = new Vector3[2];
+        private readonly bool[] _armAimHasRotation = new bool[2];
+        private readonly Quaternion[] _armAimHandRotation = new Quaternion[2];
+        private float _extraLean;
+
         // ------------------------------------------------------------------ Public API
 
         public event Action<BodySide, Vector3> Footstep;
@@ -226,6 +233,45 @@ namespace ActiveRagdoll
                 float t = _strikeTime - _strike.windupTime;
                 return t >= 0f && t <= _strike.strikeTime + _strike.recoverTime * _strike.activeTail;
             }
+        }
+
+        /// <summary>Extra forward torso lean in degrees (reaching down to pick something up).</summary>
+        public float ExtraLean
+        {
+            get => _extraLean;
+            set => _extraLean = RagdollMath.IsFinite(value) ? Mathf.Clamp(value, -20f, 60f) : 0f;
+        }
+
+        /// <summary>
+        /// Overrides one arm: the wrist is driven to <paramref name="wristTarget"/> and, optionally, the physical
+        /// hand to <paramref name="handBodyRotation"/> (world). Used to aim held weapons and reach for pickups.
+        /// Strikes on the same arm take priority.
+        /// </summary>
+        public void SetArmAim(BodySide side, Vector3 wristTarget, Quaternion handBodyRotation, bool applyRotation)
+        {
+            int i = side == BodySide.Left ? 0 : side == BodySide.Right ? 1 : -1;
+            if (i < 0 || !RagdollMath.IsFinite(wristTarget) || !RagdollMath.IsFinite(handBodyRotation))
+                return;
+            _armAim[i] = true;
+            _armAimWrist[i] = wristTarget;
+            _armAimHasRotation[i] = applyRotation;
+            _armAimHandRotation[i] = handBodyRotation;
+        }
+
+        public void ClearArmAim(BodySide side)
+        {
+            int i = side == BodySide.Left ? 0 : side == BodySide.Right ? 1 : -1;
+            if (i >= 0)
+                _armAim[i] = false;
+        }
+
+        /// <summary>Animated shoulder position of an arm (null-safe: returns false if the arm isn't rigged).</summary>
+        public bool TryGetShoulder(BodySide side, out Vector3 shoulder, out float armLength)
+        {
+            Arm arm = GetArm(side);
+            shoulder = arm != null ? arm.ik.Upper.position : Vector3.zero;
+            armLength = arm != null ? arm.ik.Length : 0f;
+            return arm != null;
         }
 
         public void SetLookTarget(Vector3 worldPoint)
@@ -321,6 +367,8 @@ namespace ActiveRagdoll
         {
             CancelStrike();
             ClearLookTarget();
+            _armAim[0] = _armAim[1] = false;
+            _extraLean = 0f;
             _flinchAngle = _flinchVelocity = Vector3.zero;
             _pelvisHeightOffset = 0f;
             _guard = 0f;
@@ -331,6 +379,8 @@ namespace ActiveRagdoll
         {
             CancelStrike();
             ClearLookTarget();
+            _armAim[0] = _armAim[1] = false;
+            _extraLean = 0f;
             _pelvisHeightOffset = 0f;
         }
 
@@ -486,7 +536,7 @@ namespace ActiveRagdoll
             Vector3 right = yawRot * Vector3.right;
             float forwardSpeed = Vector3.Dot(_smoothedVelocity, forward);
             float sideSpeed = Vector3.Dot(_smoothedVelocity, right);
-            float pitch = Mathf.Clamp(forwardSpeed * _spine.leanPerSpeed, -_spine.maxLean * 0.5f, _spine.maxLean) * profile.gaitWeight;
+            float pitch = Mathf.Clamp(forwardSpeed * _spine.leanPerSpeed, -_spine.maxLean * 0.5f, _spine.maxLean) * profile.gaitWeight + _extraLean;
             float roll = Mathf.Clamp(-sideSpeed * _spine.leanPerSpeed * 0.5f, -_spine.maxLean * 0.5f, _spine.maxLean * 0.5f) * profile.gaitWeight;
             Quaternion lean = Quaternion.AngleAxis(pitch, right) * Quaternion.AngleAxis(roll, forward);
 
@@ -742,13 +792,23 @@ namespace ActiveRagdoll
 
                 Vector3 target = Vector3.Lerp(relaxed, guard, _guard);
                 Vector3 hint = yawRot * Mirror(_arms.elbowHint, sx);
-                if (_strike != null && _strikeSide == arm.side)
+                bool striking = _strike != null && _strikeSide == arm.side;
+                bool aiming = !striking && _armAim[s];
+                if (striking)
                 {
                     target = EvaluateStrike(shoulder, length, guard, yawRot, sx);
                     hint = yawRot * Mirror(_arms.strikeElbowHint, sx);
                 }
+                else if (aiming)
+                {
+                    target = _armAimWrist[s];
+                    hint = yawRot * Mirror(_arms.strikeElbowHint, sx);
+                }
 
                 arm.ik.Solve(target, hint, 1f);
+
+                if (aiming && _armAimHasRotation[s] && arm.handBone >= 0)
+                    arm.ik.End.rotation = _armAimHandRotation[s] * _character.BonesInternal[arm.handBone].bodyToTarget;
             }
         }
 

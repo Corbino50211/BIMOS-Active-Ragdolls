@@ -34,8 +34,15 @@ namespace ActiveRagdoll
         /// <summary>Every enabled, valid character. Do not modify.</summary>
         public static IReadOnlyList<ActiveRagdollCharacter> All => s_all;
 
+        /// <summary>Raised when any character finishes initialising (valid rigs only). Integrations hook in here.</summary>
+        public static event Action<ActiveRagdollCharacter> Initialized;
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ResetStatics() => s_all.Clear();
+        private static void ResetStatics()
+        {
+            s_all.Clear();
+            Initialized = null;
+        }
 
         [Header("Rigs")]
         [Tooltip("Root of the animated (visual) rig: the model with the SkinnedMeshRenderer and optional Animator. It is moved under the physical pelvis every frame, so the ragdoll bodies must NOT be its children.")]
@@ -529,7 +536,11 @@ namespace ActiveRagdoll
         {
             _isValid = Initialize();
             if (!_isValid)
+            {
                 enabled = false;
+                return;
+            }
+            Initialized?.Invoke(this);
         }
 
         private void OnEnable()

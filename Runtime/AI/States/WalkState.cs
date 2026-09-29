@@ -33,6 +33,9 @@ namespace ActiveRagdoll
                 return;
             }
 
+            if (Machine.TryStartEquip())
+                return;
+
             NPCStateMachine.ChaseSettings chase = Machine.Chase;
             bool visible = perception.CanSeeTarget;
             Vector3 goal = visible ? target.CenterPoint : perception.LastKnownPosition;
@@ -86,7 +89,9 @@ namespace ActiveRagdoll
             if (visible)
             {
                 LookAt(target.AimPoint);
-                if (Machine.CanAttack(target, distance, toGoal))
+                if (Machine.CanShoot(target, distance))
+                    Machine.ChangeState(NPCStateId.Shoot);
+                else if (Machine.CanAttack(target, distance, toGoal))
                     Machine.ChangeState(NPCStateId.Attack);
             }
             else

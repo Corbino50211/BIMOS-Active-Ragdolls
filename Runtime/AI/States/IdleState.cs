@@ -37,6 +37,9 @@ namespace ActiveRagdoll
                 return;
             }
 
+            if (Machine.TryStartEquip())
+                return;
+
             // Non-hostile NPCs still notice people: they look at whoever they can see.
             NPCPerception perception = Machine.Perception;
             if (perception != null && perception.Target != null && perception.HasTarget)

@@ -183,6 +183,45 @@ being thrown into a wall, never on normal falls. To give a weapon its own damage
 `IImpactDamageDealer` on its Rigidbody (body parts then skip their generic impact damage) and call
 `ApplyDamage` yourself.
 
+## 5b. NPCs using guns
+
+NPCs can pick up and fire any `NPCWeapon`. That includes `HitscanGun` and, after a one-click install, the
+**BIMOS demo Pistol**.
+
+**BIMOS demo pistol:** when the BIMOS Demo sample is in the project, Unity asks once to *Install BIMOS demo weapon
+support*. You can also do it later from **Tools → Active Ragdoll → Install BIMOS Demo Weapon Support**. It
+generates two scripts in `Assets/ActiveRagdoll Generated/BIMOS Demo Weapons/`, because a package can't reference
+imported samples directly. The scripts:
+
+- give every demo `Pistol` an NPC adapter automatically. NPC shots go through the pistol's own `Fire()`, so you get
+  its sound, slide recoil, muzzle flash, casings, bullet holes and knock-back.
+- make **your** demo-pistol shots damage NPCs. Without this the demo pistol only pushes them, because it damages
+  through the samples' own `IDamageable`. Damage is 10 × `BIMOSDemoDamageBridge.DamageScale` (3), then body-part
+  multipliers apply.
+- make NPC shots damage you, if the player has `BIMOSPlayerHealth` or `PlayerHealth`.
+
+BIMOS sockets only accept a magazine that a hand is holding, so NPCs can't reload. NPC-held demo pistols have
+infinite ammo by default. Set `BIMOSDemoPistolWeapon.InfiniteAmmoForNPCs = false` to make them fire only chambered
+rounds and then drop the empty gun.
+
+**Behaviour** (`NPCStateMachine → Weapons`):
+
+- Hostile NPCs arm themselves with the nearest reachable weapon within *Search Radius* (12 m), even before they've
+  seen you (*Arm When Calm*).
+- In a fight they only detour for a weapon if it's no more than *Max Detour* (3 m) further than you. If you're
+  within 2.5 m, they fight with fists instead.
+- **Equip:** walk to the weapon, crouch and lean, reach, and grip it with the physical hand (a FixedJoint to the
+  gun's Rigidbody or ArticulationBody).
+- **Shoot:** the arm muscles aim the physical gun, and the NPC fires in bursts only when the real muzzle is on
+  target (*Aim Tolerance*). Recoil, hits and shoves spoil the aim. It backs off if you get within 1.5 m, and moves to
+  regain line of sight.
+- **Disarm:** grab the gun in an NPC's hand and it lets go after 0.3 s. NPCs drop guns when they die, and sometimes
+  when knocked down (35%).
+
+**Your own guns:** add `HitscanGun` (or derive from `NPCWeapon` and implement `NPCFire`). Set **Muzzle** and
+optionally **Grip** (where the palm goes; defaults to a child named `Grip`), plus Range, NPC Fire Interval and Aim
+Tolerance. Disable *Use Weapons* on an NPC to keep it fists-only.
+
 ## 6. Disposition (Idle / Wander / Hostile)
 
 Set on `NPCStateMachine` (also settable from code: `Disposition`, `RetaliateWhenAttacked`):

@@ -26,6 +26,8 @@ namespace ActiveRagdoll
         Fallen = 4,
         GettingUp = 5,
         Dead = 6,
+        Equip = 7,
+        Shoot = 8,
     }
 
     /// <summary>
@@ -48,6 +50,7 @@ namespace ActiveRagdoll
             public RagdollProfile stagger = new RagdollProfile(0.5f, 0.75f, 0.6f, 1f, 0.3f, 0.3f);
             public RagdollProfile fallen = new RagdollProfile(0.18f, 0f, 0f, 0f, 0f, 0f);
             public RagdollProfile gettingUp = new RagdollProfile(0.9f, 1f, 0.3f, 1f, 0.2f, 0.5f);
+            public RagdollProfile shoot = new RagdollProfile(1.1f, 1.1f, 1f, 1f, 0.6f, 1f);
             [Min(0f)] public float blendTime = 0.25f;
             [Min(0f)] public float staggerBlendTime = 0.05f;
             [Min(0f)] public float fallenBlendTime = 0.12f;
@@ -110,6 +113,27 @@ namespace ActiveRagdoll
         }
 
         [Serializable]
+        public sealed class WeaponSettings
+        {
+            [Tooltip("Pick up and use NPCWeapons (guns). Adds an NPCWeaponHolder automatically.")]
+            public bool useWeapons = true;
+            [Tooltip("How far (m) the NPC looks for weapons.")]
+            [Min(0f)] public float searchRadius = 12f;
+            [Tooltip("Hostile NPCs arm themselves even before they have seen anyone.")]
+            public bool armWhenCalm = true;
+            [Tooltip("Skip a weapon that is this much further (m) away than the enemy.")]
+            [Min(0f)] public float maxDetour = 3f;
+            [Min(0f)] public float equipTimeout = 10f;
+            [Tooltip("Back away from enemies closer than this (m) while shooting.")]
+            [Min(0f)] public float minShootDistance = 1.5f;
+            [Min(0f)] public float firstShotDelay = 0.4f;
+            [Min(1)] public int burstMin = 1;
+            [Min(1)] public int burstMax = 3;
+            [Min(0f)] public float burstPauseMin = 0.5f;
+            [Min(0f)] public float burstPauseMax = 1.3f;
+        }
+
+        [Serializable]
         public sealed class CorpseSettings
         {
             [Tooltip("Seconds a corpse persists (0 = forever).")]
@@ -145,6 +169,7 @@ namespace ActiveRagdoll
         [SerializeField] private ChaseSettings _chase = new ChaseSettings();
         [SerializeField] private AttackSettings _attack = new AttackSettings();
         [SerializeField] private ReactionSettings _reactions = new ReactionSettings();
+        [SerializeField] private WeaponSettings _weapons = new WeaponSettings();
         [SerializeField] private CorpseSettings _corpse = new CorpseSettings();
 
         [Header("Events")]
@@ -165,6 +190,7 @@ namespace ActiveRagdoll
         private float _pendingStaggerSeverity;
         private Vector3 _pendingStaggerDirection;
         private bool _provoked;
+        private float _nextWeaponSearch;
 
         // ------------------------------------------------------------------ Accessors used by states
 
@@ -176,6 +202,8 @@ namespace ActiveRagdoll
         public NPCPerception Perception { get; private set; }
         public NPCNavigator Navigator { get; private set; }
         public AnimatorParameterBridge AnimatorBridge { get; private set; }
+        public NPCWeaponHolder Holder { get; private set; }
+        internal NPCWeapon PendingWeapon { get; private set; }
 
         /// <summary>Idle / Wander / Hostile. Can be changed at runtime.</summary>
         public NPCDisposition Disposition
@@ -214,6 +242,7 @@ namespace ActiveRagdoll
         public ChaseSettings Chase => _chase;
         public AttackSettings Attack => _attack;
         public ReactionSettings Reactions => _reactions;
+        public WeaponSettings Weapons => _weapons;
         public CorpseSettings Corpse => _corpse;
 
         public NPCStateId CurrentState => _current != null ? _current.Id : NPCStateId.Idle;
@@ -287,6 +316,8 @@ namespace ActiveRagdoll
                 new FallenState(this),
                 new GettingUpState(this),
                 new DeadState(this),
+                new EquipState(this),
+                new ShootState(this),
             };
         }
 
@@ -307,6 +338,9 @@ namespace ActiveRagdoll
             Perception = GetComponent<NPCPerception>();
             Navigator = GetComponent<NPCNavigator>();
             AnimatorBridge = GetComponent<AnimatorParameterBridge>();
+            Holder = GetComponent<NPCWeaponHolder>();
+            if (Holder == null && _weapons.useWeapons)
+                Holder = gameObject.AddComponent<NPCWeaponHolder>();
 
             if (!HasLocomotion) Debug.LogWarning($"{ActiveRagdollCharacter.LogPrefix} '{name}': no LocomotionController; the NPC cannot move.", this);
             if (Perception == null) Debug.LogWarning($"{ActiveRagdollCharacter.LogPrefix} '{name}': no NPCPerception; the NPC will never find targets.", this);
@@ -438,14 +472,16 @@ namespace ActiveRagdoll
             NPCStateId s = CurrentState;
             if (s == NPCStateId.Dead || s == NPCStateId.Fallen)
                 return;
+            if (Holder != null && Holder.IsArmed && UnityEngine.Random.value < Holder.DropOnKnockdownChance)
+                Holder.Drop();
             ChangeState(NPCStateId.Fallen);
         }
 
         private void OnStumbled(float severity, Vector3 direction)
         {
             NPCStateId s = CurrentState;
-            if (s == NPCStateId.Idle || s == NPCStateId.Walk || s == NPCStateId.Stagger
-                || (s == NPCStateId.Attack && severity >= _reactions.interruptAttackSeverity))
+            if (s == NPCStateId.Idle || s == NPCStateId.Walk || s == NPCStateId.Stagger || s == NPCStateId.Equip
+                || ((s == NPCStateId.Attack || s == NPCStateId.Shoot) && severity >= _reactions.interruptAttackSeverity))
                 EnterStagger(severity, direction);
         }
 
@@ -465,7 +501,7 @@ namespace ActiveRagdoll
                 return;
             }
 
-            bool staggers = s == NPCStateId.Attack
+            bool staggers = s == NPCStateId.Attack || s == NPCStateId.Shoot
                 ? hit.severity >= _reactions.interruptAttackSeverity
                 : hit.severity >= _reactions.staggerSeverity;
             if (staggers)
@@ -475,6 +511,42 @@ namespace ActiveRagdoll
         // ------------------------------------------------------------------ Combat helpers used by states
 
         internal bool AttackReady => Time.time >= _nextAttackTime;
+
+        /// <summary>Armed with a working gun and the target is in range and in sight.</summary>
+        internal bool CanShoot(CombatTarget target, float distance)
+        {
+            return _weapons.useWeapons && Holder != null && Holder.IsArmed && Holder.Weapon.HasAmmo
+                && target != null && Perception != null && Perception.CanSeeTarget && distance <= Holder.Weapon.Range;
+        }
+
+        /// <summary>Starts fetching a nearby weapon when that makes sense. Returns true if it switched state.</summary>
+        internal bool TryStartEquip()
+        {
+            if (!_weapons.useWeapons || Holder == null || Holder.IsArmed || Time.time < _nextWeaponSearch)
+                return false;
+            _nextWeaponSearch = Time.time + 0.5f;
+
+            NPCWeapon weapon = Holder.FindWeapon(_weapons.searchRadius);
+            if (weapon == null)
+                return false;
+
+            if (ShouldEngage)
+            {
+                Vector3 from = Character.Position;
+                float toEnemy = RagdollMath.Flatten(Perception.Target.CenterPoint - from).magnitude;
+                float toWeapon = RagdollMath.Flatten(weapon.GripPosition - from).magnitude;
+                if ((Perception.CanSeeTarget && toEnemy < 2.5f) || toWeapon > toEnemy + _weapons.maxDetour)
+                    return false; // enemy is right here, or the weapon is out of the way
+            }
+            else if (!(_weapons.armWhenCalm && _disposition == NPCDisposition.Hostile))
+            {
+                return false;
+            }
+
+            PendingWeapon = weapon;
+            ChangeState(NPCStateId.Equip);
+            return true;
+        }
 
         internal void SetAttackCooldown(float seconds)
         {
@@ -533,6 +605,8 @@ namespace ActiveRagdoll
             BodySide side = s.side == BodySide.Center ? BodySide.Right : s.side;
             if (!Procedural.CanStrikeWith(side))
                 return 0f;
+            if (Holder != null && Holder.IsArmed && Holder.Hand == side)
+                return 0f; // that hand is holding a gun
             return s.side == _lastStrikeSide ? s.weight * 0.5f : s.weight;
         }
 
@@ -558,6 +632,7 @@ namespace ActiveRagdoll
             _reactions ??= new ReactionSettings();
             _corpse ??= new CorpseSettings();
             _wander ??= new WanderSettings();
+            _weapons ??= new WeaponSettings();
             _wander.pauseMax = Mathf.Max(_wander.pauseMax, _wander.pauseMin);
             _attack.cooldownMax = Mathf.Max(_attack.cooldownMax, _attack.cooldownMin);
             _reactions.staggerDurationMax = Mathf.Max(_reactions.staggerDurationMax, _reactions.staggerDurationMin);
