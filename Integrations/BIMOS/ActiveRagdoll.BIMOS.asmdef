@@ -1,0 +1,25 @@
+{
+    "name": "ActiveRagdoll.BIMOS",
+    "rootNamespace": "ActiveRagdoll.BIMOSIntegration",
+    "references": [
+        "ActiveRagdoll.Runtime",
+        "kadenzombie8.bimos"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "ACTIVE_RAGDOLL_BIMOS"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.kadenzombie8.bimos",
+            "expression": "1.0.0",
+            "define": "ACTIVE_RAGDOLL_BIMOS"
+        }
+    ],
+    "noEngineReferences": false
+}

@@ -1,0 +1,25 @@
+{
+    "name": "ActiveRagdoll.Samples.DesktopTest",
+    "rootNamespace": "ActiveRagdoll.Samples",
+    "references": [
+        "ActiveRagdoll.Runtime",
+        "Unity.InputSystem"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "ACTIVE_RAGDOLL_INPUT_SYSTEM"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.unity.inputsystem",
+            "expression": "1.0.0",
+            "define": "ACTIVE_RAGDOLL_INPUT_SYSTEM"
+        }
+    ],
+    "noEngineReferences": false
+}

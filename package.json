@@ -1,0 +1,35 @@
+{
+  "name": "com.corbino50211.bimos-active-ragdolls",
+  "version": "1.0.0",
+  "displayName": "BIMOS Active Ragdolls",
+  "description": "Physics-driven active ragdoll NPCs for Unity VR, built to sit alongside the BIMOS player rig. NPCs walk, balance, fight and die as continuously simulated ragdolls: joint motors drive every limb toward an animated/procedural puppet pose, bounded balance and propulsion forces keep them upright, and every body part reacts to pushes, punches, bullets and stabs at all times.",
+  "unity": "6000.0",
+  "author": {
+    "name": "Corbino50211",
+    "url": "https://github.com/Corbino50211/BIMOS-Active-Ragdolls"
+  },
+  "documentationUrl": "https://github.com/Corbino50211/BIMOS-Active-Ragdolls#readme",
+  "changelogUrl": "https://github.com/Corbino50211/BIMOS-Active-Ragdolls/blob/main/CHANGELOG.md",
+  "keywords": [
+    "active ragdoll",
+    "ragdoll",
+    "physics",
+    "npc",
+    "ai",
+    "vr",
+    "bimos",
+    "boneworks"
+  ],
+  "dependencies": {
+    "com.unity.modules.physics": "1.0.0",
+    "com.unity.modules.animation": "1.0.0",
+    "com.unity.modules.ai": "1.0.0"
+  },
+  "samples": [
+    {
+      "displayName": "Desktop Test Harness",
+      "description": "Mouse/keyboard test player (shoot, shove, stab-test, respawn) so the NPCs can be exercised without a headset. Requires the Input System package (already a BIMOS dependency).",
+      "path": "Samples~/DesktopTest"
+    }
+  ]
+}

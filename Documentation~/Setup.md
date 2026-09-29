@@ -1,0 +1,209 @@
+# Setup & Wiring
+
+This guide covers turning a humanoid model into an active-ragdoll NPC (automatically or by hand), the
+layer and collision setup, the BIMOS player side, and wiring weapons.
+
+---
+
+## 1. Layers and collision
+
+Run **Tools → Active Ragdoll → Setup Layers** once per project. It creates an `ActiveRagdoll` layer in the
+first free user slot.
+
+| Layer | Who is on it | Must collide with |
+|---|---|---|
+| `ActiveRagdoll` | every NPC ragdoll body and collider (applied at runtime by `ActiveRagdollCharacter`) | everything, **including itself** (NPCs shove each other, corpses pile up) and `BIMOSRig` (your hands and body hit NPCs) |
+| `BIMOSRig` | the BIMOS player physics rig (BIMOS's `PhysicsRig.Awake` sets it and ignores `BIMOSRig`↔`BIMOSRig`) | `ActiveRagdoll` |
+
+The default collision matrix already allows all of this. Only change it if your project has disabled
+layer pairs.
+
+Collisions *within* one NPC are handled per character, not per layer. Jointed neighbours never collide, and with
+`Self Collision = IgnoreNearby` (default depth 2), bodies two or fewer joints apart don't collide either. So thighs
+don't fight the pelvis and forearms in the guard don't fight the chest, while hands can still hit the head and
+feet can't pass through each other.
+
+Queries use masks built from these layers:
+
+- **Ground probes** (feet, pelvis) use `BalanceController.Ground Mask` minus `Ignore Raycast` and `BIMOSRig`,
+  and always skip the NPC's own colliders. NPCs *can* stand on corpses.
+- **Line of sight** uses `NPCPerception.Occlusion Mask` minus `Ignore Raycast`. `BIMOSRig` stays included so the
+  ray can hit the player.
+- **HitscanGun** ignores `BIMOSRig` by default (`Ignore Player Rig`), so you can't shoot your own hands.
+
+If the layer doesn't exist at runtime, a warning is logged once and the authored layers are kept. Everything
+still works, because own-collider filtering doesn't depend on layers.
+
+## 2. Automatic setup (recommended)
+
+### From a Humanoid model
+
+1. Import the model with **Rig → Animation Type: Humanoid**.
+2. Drag it into the scene, standing in its bind/T/A pose with its feet on the floor.
+3. **Tools → Active Ragdoll → Ragdoll Builder**, pick the model, press **Build**.
+
+The builder (fully undoable):
+
+- Creates `<Model> (Active Ragdoll)` with three children:
+  ```
+  <Model> (Active Ragdoll)      ← all runtime components live here; this transform never moves
+  ├─ Visual                     ← animated root, at floor level; moved under the pelvis every frame
+  │  └─ <Model>                 ← your model: SkinnedMeshRenderer + Animator (root motion off)
+  └─ Ragdoll                    ← flat list of physical bodies (never parented under Visual)
+     ├─ Pelvis   (Rigidbody, BodyPart, Collider child)
+     ├─ Spine    (… + ConfigurableJoint → Pelvis)
+     ├─ Chest    (… → Spine)          Head → Chest
+     ├─ LeftUpperArm → Chest,  LeftLowerArm → LeftUpperArm,  LeftHand → LeftLowerArm   (same for Right)
+     └─ LeftUpperLeg → Pelvis, LeftLowerLeg → LeftUpperLeg,  LeftFoot → LeftLowerLeg   (same for Right)
+  ```
+- Sizes colliders from the skeleton: box pelvis/torso, sphere head, capsule limbs, fist capsules, and flat foot
+  boxes that sit on the floor.
+- Distributes the total mass with standard anthropometric fractions (see *Physics tuning*).
+- Authors anatomical joint limits (knees and elbows are hinges; see *Physics tuning*).
+- Removes leftover Rigidbodies, Colliders and Joints from the model (such as Unity Ragdoll Wizard output). The
+  visual rig must not carry physics.
+- Adds and wires: `ActiveRagdollCharacter`, `JointMotorDriver`, `BalanceController`, `LocomotionController`,
+  `ProceduralAnimator`, `RagdollHealth`. With *Add AI* on, it also adds `CombatTarget` (team 1, aim = head,
+  centre = chest), `NPCPerception`, `NPCNavigator` and `NPCStateMachine`. It adds `AnimatorParameterBridge` if the
+  Animator has a controller, and `BIMOSRagdollGrabs` if the BIMOS integration is compiled.
+
+Save the result as a prefab. Prefabs spawn and pool correctly (see *Pooling* below).
+
+### Without any model
+
+**Tools → Active Ragdoll → Create Mannequin NPC** generates a 1.8 m capsule mannequin and builds it.
+**Create Test Arena** adds a floor and three mannequins, plus the desktop test player if that sample is imported.
+
+## 3. Manual wiring (custom rigs)
+
+Use this when your ragdoll is hand-made or your rig isn't Humanoid.
+
+**Hierarchy rules** (validated at startup and live in the inspector):
+
+1. The **animated rig** (the visible model) and the **ragdoll** (the bodies) are separate hierarchies. No ragdoll
+   Rigidbody may be a descendant of the animated root, because the animated root is moved every frame and would
+   teleport the bodies.
+2. The **animated root** sits at **floor level** in the rest pose, with its forward axis being the character's
+   forward.
+3. In the rest pose, each ragdoll body is aligned with its animated bone. Offsets are allowed: they're captured at
+   startup and preserved.
+4. Every body except the pelvis has a **ConfigurableJoint on itself** whose **Connected Body is its parent body**.
+   Linear motion is locked and *Configured In World Space* is off.
+5. The joint tree is rooted at the pelvis.
+
+**Required bones:** Pelvis, Spine *or* Chest, Head, and both legs (UpperLeg, LowerLeg, Foot). Arms are optional
+but needed for attacks. Hands are optional (without them the fists can ride on the forearms).
+
+**Steps:**
+
+1. Add `ActiveRagdollCharacter` to a root object that contains both the animated rig and the ragdoll root.
+2. Add a `BodyPart` to each ragdoll Rigidbody and set its **Role**.
+3. Press **Auto Assign Bones** in the `ActiveRagdollCharacter` inspector. It builds the bone list from the
+   BodyParts and finds animated targets from the Humanoid avatar, or by name (`Pelvis`, `LeftUpperArm`, …) on
+   generic rigs. Check the list and fix any target it couldn't find.
+4. Add the subsystems you want (see the component table in the README). Each is optional and disables itself
+   cleanly if it can't initialise. Without `JointMotorDriver`, the character is a passive ragdoll.
+5. Fix everything the inspector reports as an error (red).
+
+## 4. BIMOS player setup
+
+Nothing is required:
+
+- `BIMOSIntegrationBootstrap` adds a `BIMOSPlayerTarget` (team 0) to every `BIMOS.Player` after each scene load.
+  It runs again whenever an NPC finds no hostile targets, which covers players spawned later by BIMOS spawn points.
+  Opt out with `BIMOSIntegrationBootstrap.Enabled = false` before the first scene loads, or define
+  `ACTIVE_RAGDOLL_NO_BIMOS_BOOTSTRAP`.
+- NPCs aim at `PhysicsRig.HeadRigidbody` and measure distance to `PhysicsRig.PelvisRigidbody`, so they track your
+  physical body rather than the headset.
+
+Optional:
+
+- Add **`BIMOSPlayerHealth`** to the BIMOS `Player` object so NPC strikes damage you. Hits on your physics hands
+  count as **blocked** (×0.2 by default), and head hits hurt more (×1.5). Anything you're holding blocks by
+  itself.
+- NPC punches also physically shove your BIMOS rig, because both bodies are simulated.
+
+### Grabbing NPCs (`BIMOSRagdollGrabs`)
+
+Every ragdoll collider gets a BIMOS `Grab` (existing Grabs with custom hand poses are kept). BIMOS finds grabs
+with an `OverlapBox` on all layers and joins your physics hand to the limb's Rigidbody with a `FixedJoint`.
+
+While you hold a limb, its whole chain drops to `JointMotorDriver.Grabbed Strength` (25%), so you can wrench an
+arm or drag the NPC by the head while the rest of it keeps fighting. Grabbing a live NPC also makes it target you.
+Corpses stay grabbable. Set **Grabbable When Alive** off for corpse-only grabbing.
+
+## 5. Weapons
+
+All damage flows through `IDamageable.ApplyDamage(in DamageInfo)`. `BodyPart` implements it: it applies the
+impulse at the exact hit point, adds pain to the struck joint and its neighbours, feeds balance (stagger or
+knockdown), and applies health damage with the part's multiplier.
+
+### Guns: `HitscanGun`
+
+Add it to a BIMOS grabbable gun. Set **Muzzle** to a transform at the barrel tip, pointing forward. On the gun's
+BIMOS `Interactable`:
+
+| Interactable event | HitscanGun method |
+|---|---|
+| `TriggerDownEvent` | `TriggerDown()` |
+| `TriggerUpEvent` | `TriggerUp()` |
+| *or* `OnTick (float, bool, bool)` | `OnTriggerTick` (dynamic) |
+
+Recoil is an impulse on the gun's own Rigidbody at the muzzle, so your physics hands feel it. `On Hit (point,
+normal)` is for impact effects. Custom guns can call `Ballistics.FireHitscan(...)` directly.
+
+### Knives, swords, spears: `BladeWeapon`
+
+Add it to the blade's Rigidbody (the BIMOS grabbable). Then:
+
+- Create a child **Tip** transform at the point, and set **Blade Axis** (local, handle → tip) and **Blade Length**.
+- Optionally list the **Blade Colliders** (the edge) so slashes only count on the edge.
+
+Behaviour:
+
+- **Stab**: the tip leads at ≥ 1.6 m/s within 35° of the blade axis. Deals stab damage plus a per-speed bonus.
+  If *Embed* is on, a sliding joint holds the blade in the body with friction. It travels deeper when pushed, can
+  drag the NPC around, pulls out when withdrawn, and tears out above *Embed Break Force*.
+- **Slash**: the edge moves sideways at ≥ 3 m/s.
+- **Blunt**: anything else hard enough (such as the pommel).
+
+Stab and slash use the tip velocity measured before the physics step. That's reliable even though the solver has
+already bounced the blade by the time the collision callback runs.
+
+### Explosions
+
+`Ballistics.Explode(center, radius, maxDamage, maxVelocityChange, layerMask, source)` kicks every body in range
+(mass-scaled, with distance falloff). Each ragdoll character takes damage only once.
+
+### Anything else
+
+Any Rigidbody that hits a body part hard enough deals blunt damage from the collision impulse: a thrown brick, a
+swung pipe, your fist (see `RagdollHealth → Impact Damage`). Static geometry only hurts on violent impacts, such as
+being thrown into a wall, never on normal falls. To give a weapon its own damage rules, implement
+`IImpactDamageDealer` on its Rigidbody (body parts then skip their generic impact damage) and call
+`ApplyDamage` yourself.
+
+## 6. Animation clips (optional)
+
+The procedural layer works without clips. To add animation:
+
+1. Give the model's Animator a controller. `AnimatorParameterBridge` (added by the builder) feeds these parameters
+   when they exist: `Speed`, `Forward`, `Strafe` (float), `Grounded`, `Dead` (bool), `State` (int, `NPCStateId`),
+   `Strike` (trigger).
+2. On `ProceduralAnimator`, turn off the layers your clips replace:
+   - **Procedural Legs** off: a walk blend tree on `Forward`/`Strafe` drives the legs instead. Feet may slide a
+     little more than with the stepping gait.
+   - **Procedural Arms** off: arm animation drives the arms. Strikes still boost the muscles and pin the fist.
+3. The Animator's update mode is forced to *Normal*, and root motion is forced off. The physical body is the only
+   thing that moves the character.
+
+## 7. Spawning, pooling and despawning
+
+- **Spawn** prefabs normally. Joints capture their reference pose on `Awake`, so the prefab must be saved in its
+  rest pose (the builder does this).
+- **Respawn/pool:** `NPCStateMachine.Respawn(groundPosition, facing)` revives and stands the NPC up in its rest
+  pose. `ActiveRagdollCharacter.Teleport(...)` moves it without reviving.
+- **Deactivating** an NPC restores its rest pose first. ConfigurableJoints re-capture their reference frame on
+  re-activation, and this stops a pooled corpse from coming back with twisted joints.
+- **Corpse lifetime:** `NPCStateMachine → Corpse → Lifetime` (0 = forever). *Destroy On Expire* off deactivates
+  instead, for pooling.
