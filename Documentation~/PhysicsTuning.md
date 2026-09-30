@@ -90,13 +90,6 @@ which the muscle stops getting stronger. That last value is what makes NPCs push
 | Leg | 30 | 0.9 | 60° | hip k ≈ 2250, knee k ≈ 340 |
 | Foot | 24 | 0.9 | 45° | |
 
-**World-space legs** (*World Space Legs*, 1): thighs and feet aim at their animated world orientation, measured
-against where the pelvis and shins actually are rather than where the animation has them. When the pelvis tips
-forward, the hips still swing the legs under the body and the feet stay flat. Without this the whole leg rotates
-backward with the pelvis, so the feet trail behind and point down onto the toes. The reaction torque pushes the
-pelvis back upright, as real hip muscles do. It fades out between 30° and 60° of pelvis error, so a fallen NPC's
-legs don't try to point through the floor. 0 = the old pelvis-relative legs.
-
 **Strength changes are rate-limited:** a muscle loses strength at up to 20/s, so hits and grabs take effect at once. It
 regains strength at up to 4/s (*Strength Recovery Rate*), so a released limb eases back into pose over about a
 quarter second instead of snapping. The strike boost is applied on top, unsmoothed, so punches stay instant.
