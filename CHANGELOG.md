@@ -20,6 +20,9 @@
   they're stuck in and tear out when wrenched sideways. Works with Rigidbody and ArticulationBody blades.
   `BIMOSBlade` (auto-added to grabbable blades) weakens the stabbed limb while held, blames wounds on the player
   and adds controller haptics.
+- Blood (`RagdollBlood`, `BloodFX`): asset-free, pooled blood for bullets, stabs and slashes. Entry and exit
+  sprays, heartbeat-pumped wounds, seeping around stuck blades, a gush on extraction, and splats where droplets
+  land. Added to every NPC automatically.
 - AI: `NPCStateMachine` (Idle, Walk, Attack, Stagger, Fallen, GettingUp, Dead), `NPCPerception`, `NPCNavigator`.
 - BIMOS 1.0.0 integration: `BIMOSPlayerTarget`, `BIMOSPlayerHealth` (hand blocking), `BIMOSRagdollGrabs`,
   automatic player bootstrap.

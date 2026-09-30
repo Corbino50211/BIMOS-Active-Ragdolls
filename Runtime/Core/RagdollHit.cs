@@ -27,9 +27,13 @@ namespace ActiveRagdoll
         /// <summary>Normalised 0..1 estimate of how hard the hit was, used for stagger/flinch decisions.</summary>
         public readonly float severity;
 
+        /// <summary>Direction the damaging object was travelling, if known (zero otherwise).</summary>
+        public readonly Vector3 direction;
+
         public RagdollHit(int boneIndex, BoneRole role, Vector3 point, Vector3 impulse, float damage,
-            DamageType damageType, GameObject source, float severity)
+            DamageType damageType, GameObject source, float severity, Vector3 direction = default)
         {
+            this.direction = direction;
             this.boneIndex = boneIndex;
             this.role = role;
             this.point = point;
@@ -40,6 +44,7 @@ namespace ActiveRagdoll
             this.severity = severity;
         }
 
-        public Vector3 Direction => RagdollMath.SafeNormalize(impulse, Vector3.zero);
+        /// <summary>Travel direction of whatever hit: the weapon's direction if known, else the impulse direction, else zero.</summary>
+        public Vector3 Direction => RagdollMath.SafeNormalize(direction, RagdollMath.SafeNormalize(impulse, Vector3.zero));
     }
 }

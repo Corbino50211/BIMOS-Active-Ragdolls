@@ -156,7 +156,7 @@ namespace ActiveRagdoll
             }
 
             float severity = _character.ComputeSeverity(physicalImpulse.magnitude, applied);
-            _character.RegisterHit(new RagdollHit(_boneIndex, _role, info.point, physicalImpulse, applied, info.type, info.source, severity));
+            _character.RegisterHit(new RagdollHit(_boneIndex, _role, info.point, physicalImpulse, applied, info.type, info.source, severity, info.direction));
         }
 
         private void OnCollisionEnter(Collision collision)

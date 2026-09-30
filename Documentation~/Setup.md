@@ -231,6 +231,32 @@ being thrown into a wall, never on normal falls. To give a weapon its own damage
 `IImpactDamageDealer` on its Rigidbody (body parts then skip their generic impact damage) and call
 `ApplyDamage` yourself.
 
+### Blood (`RagdollBlood`)
+
+Every NPC bleeds automatically. There's nothing to set up and no assets are needed: the particles and splat
+textures are generated at runtime and rendered with `Sprites/Default`, which works in both URP and the built-in
+pipeline.
+
+- **Shot:** a spray back out of the entry hole, a bigger one out of the exit wound (found by tracing through the
+  body part), then the entry hole pumps blood in time with the heartbeat for about 7 s.
+- **Stabbed:** a spurt on the way in. While the knife is in, blood seeps round the blade, more as you twist the
+  wound open. When the knife comes out, the wound gushes and keeps bleeding.
+- **Slashed:** a spray along the cut.
+- After death, wounds slow to a seep over 4 s. Corpses still bleed when shot or stabbed (*Corpses Bleed*).
+- Droplets that land leave blood splats on floors, walls and props. Up to 80 exist at once; the oldest is
+  reused. Splats on moving props follow the prop.
+
+To change the look, add **Ragdoll Blood** to the NPC yourself. It has settings for colour, amount (0 = none),
+droplet size, which weapon types bleed, bleed time and heart rate. For global control:
+
+- `RagdollBlood.AutoAdd = false` turns automatic blood off.
+- `BloodFX.ParticleMaterial` and `BloodFX.SplatMaterial` let you use your own materials.
+- `BloodFX.MaxSplats` and `BloodFX.SplatChance` limit the splats.
+- `BloodFX.Spray(...)` emits blood from your own scripts.
+
+Everything is one pooled particle system emitted from code, so heavy bleeding doesn't instantiate or allocate
+anything, which keeps it light enough for Quest.
+
 ## 5b. NPCs using guns
 
 NPCs can pick up and fire any `NPCWeapon`. That includes `HitscanGun` and, after a one-click install, the

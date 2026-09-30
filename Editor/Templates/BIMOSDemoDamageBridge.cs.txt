@@ -42,9 +42,45 @@ namespace ActiveRagdoll.BIMOSDemo
 
             Vector3 point = _collider != null ? _collider.bounds.center : transform.position;
             Vector3 direction = CurrentMuzzle != null ? (point - CurrentMuzzle.position).normalized : Vector3.zero;
+            if (TryFindShot(out RaycastHit shot, out Vector3 shotDirection))
+            {
+                point = shot.point; // the real bullet hole, for blood and hit reactions
+                direction = shotDirection;
+            }
             // The demo gun already pushed the hit rigidbody; only damage is added here.
             target.ApplyDamage(new DamageInfo(damageAmount * DamageScale, DamageType.Bullet, point, direction,
                 Vector3.zero, CurrentShooter, _collider));
+        }
+
+        /// <summary>
+        /// The demo IDamageable doesn't say where the bullet hit. Re-trace it: the firing barrel is either the
+        /// NPC's (CurrentMuzzle) or whichever demo pistol's barrel ray hits this collider nearest.
+        /// </summary>
+        private bool TryFindShot(out RaycastHit hit, out Vector3 direction)
+        {
+            hit = default;
+            direction = Vector3.zero;
+            if (_collider == null)
+                return false;
+            float best = float.PositiveInfinity;
+            if (CurrentMuzzle != null)
+                Consider(CurrentMuzzle, ref hit, ref direction, ref best);
+            else
+                foreach (NPCWeapon weapon in NPCWeapon.All)
+                    if (weapon is BIMOSDemoPistolWeapon && weapon.Muzzle != null)
+                        Consider(weapon.Muzzle, ref hit, ref direction, ref best);
+            return best < float.PositiveInfinity;
+        }
+
+        private void Consider(Transform muzzle, ref RaycastHit hit, ref Vector3 direction, ref float best)
+        {
+            var ray = new Ray(muzzle.position, muzzle.forward);
+            if (_collider.Raycast(ray, out RaycastHit candidate, 1000f) && candidate.distance < best)
+            {
+                best = candidate.distance;
+                hit = candidate;
+                direction = ray.direction;
+            }
         }
     }
 
