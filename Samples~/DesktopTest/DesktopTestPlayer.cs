@@ -10,7 +10,7 @@ namespace ActiveRagdoll.Samples
     /// <see cref="CombatTarget"/> on team 0, so NPCs hunt it exactly as they would a BIMOS player.
     /// <para>
     /// WASD move · mouse look · LMB shoot · RMB shove · F stab (short-range thrust) · G grenade at crosshair ·
-    /// V throw a knife (it sticks) · hold Q twist / E yank the knife you're looking at · K kill all · R respawn all ·
+    /// V throw a knife (it sticks) · B break the bone you aim at · hold Q twist / E yank the knife you're looking at · K kill all · R respawn all ·
     /// T slow motion · Esc release cursor
     /// </para>
     /// </summary>
@@ -127,6 +127,7 @@ namespace ActiveRagdoll.Samples
             if (kb.fKey.wasPressedThisFrame) Stab();
             if (kb.gKey.wasPressedThisFrame) Grenade();
             if (kb.vKey.wasPressedThisFrame) ThrowKnife();
+            if (kb.bKey.wasPressedThisFrame) BreakBone();
             if (kb.qKey.wasPressedThisFrame || kb.eKey.wasPressedThisFrame) PickKnife();
             if ((kb.qKey.isPressed || kb.eKey.isPressed) && _workedKnife != null)
             {
@@ -214,6 +215,22 @@ namespace ActiveRagdoll.Samples
             _lastEvent = "Threw a knife";
         }
 
+        private void BreakBone()
+        {
+            Ray ray = AimRay();
+            if (!PhysicsQuery.Raycast(ray.origin, ray.direction, 30f, ~0, null, transform, out RaycastHit hit))
+                return;
+            BodyPart part = hit.collider.attachedRigidbody != null ? hit.collider.attachedRigidbody.GetComponent<BodyPart>() : null;
+            BoneBreaking bones = part != null ? part.Character.GetComponent<BoneBreaking>() : null;
+            if (bones == null)
+            {
+                _lastEvent = "Aim at an NPC's arm, leg or neck";
+                return;
+            }
+            bones.Break(part.Role);
+            _lastEvent = bones.IsBroken(part.Role) ? $"Broke {Describe(hit.collider)}" : $"{part.Role} can't break";
+        }
+
         private static Collider KnifePart(GameObject knife, Vector3 localPosition, Vector3 size)
         {
             GameObject part = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -293,7 +310,7 @@ namespace ActiveRagdoll.Samples
             GUILayout.BeginArea(new Rect(10f, 10f, 480f, 400f), GUI.skin.box);
             GUILayout.Label($"Health: {_health.CurrentHealth:0}/{_health.MaxHealth:0}{(_health.IsAlive ? "" : "  (DEAD - press R)")}");
             GUILayout.Label("WASD move · mouse look · LMB shoot · RMB shove · F stab · G grenade");
-            GUILayout.Label("V throw knife · hold Q twist / E yank the stuck knife you look at");
+            GUILayout.Label("V throw knife · hold Q twist / E yank the stuck knife you look at · B break bone");
             GUILayout.Label("K kill all · R respawn all · T slow-mo · Esc cursor");
             GUILayout.Label(_lastEvent);
             foreach (ActiveRagdollCharacter c in ActiveRagdollCharacter.All)

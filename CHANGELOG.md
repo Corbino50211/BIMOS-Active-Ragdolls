@@ -23,6 +23,9 @@
 - Blood (`RagdollBlood`, `BloodFX`): asset-free, pooled blood for bullets, stabs and slashes. Entry and exit
   sprays, heartbeat-pumped wounds, seeping around stuck blades, a gush on extraction, and splats where droplets
   land. Added to every NPC automatically.
+- Bone breaking (`BoneBreaking`): arms, legs and neck snap from big blows, overextension past the joint limit
+  or bullets. Broken joints go floppy (no muscle, wider limits); broken legs drop the NPC, broken arms drop the gun,
+  and a broken neck kills. Generated crack sound. Added to every NPC automatically.
 - AI: `NPCStateMachine` (Idle, Walk, Attack, Stagger, Fallen, GettingUp, Dead), `NPCPerception`, `NPCNavigator`.
 - BIMOS 1.0.0 integration: `BIMOSPlayerTarget`, `BIMOSPlayerHealth` (hand blocking), `BIMOSRagdollGrabs`,
   automatic player bootstrap.

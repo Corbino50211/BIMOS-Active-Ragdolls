@@ -257,6 +257,29 @@ droplet size, which weapon types bleed, bleed time and heart rate. For global co
 Everything is one pooled particle system emitted from code, so heavy bleeding doesn't instantiate or allocate
 anything, which keeps it light enough for Quest.
 
+### Broken bones (`BoneBreaking`)
+
+Every NPC gets breakable bones automatically: upper and lower arms, upper and lower legs, and the neck.
+
+**What breaks a bone:**
+- **A big blow:** one that changes the bone's speed by *Impact Break Speed* (11 m/s). A hard punch is about 4;
+  being thrown into a wall or landing badly from a height is about 15. The neck is 1.6× tougher.
+- **Being forced past the joint limit:** more than *Overextension* (12°) for a few physics steps. For example,
+  wrenching an arm with a BIMOS hand, or kicking a knee sideways.
+- **Bullets:** a *Bullet Break Chance* (15%) per arm or leg hit.
+
+**What a broken bone does:**
+- **Floppy:** the joint's muscle gives out (*Broken Strength* 0) and its limits open by *Extra Limit* (60°), so the
+  limb dangles and bends the wrong way.
+- **Broken leg:** the leg can barely hold weight, so the NPC goes down.
+- **Broken arm:** the arm can't punch or hold a gun, and a gun in that hand is dropped.
+- **Broken neck:** the head lolls, and the NPC dies if *Broken Neck Kills* is on.
+- **Feedback:** a crack sound (generated, or your own *Snap Sounds*) and a flinch.
+- **Healing:** everything heals on `Revive`.
+
+Add **Bone Breaking** to an NPC to change the settings. Use `BoneBreaking.AutoAdd = false` to turn it off
+everywhere. Break bones from scripts with `Break(BoneRole)`, and react with the `BoneBroken` event.
+
 ## 5b. NPCs using guns
 
 NPCs can pick up and fire any `NPCWeapon`. That includes `HitscanGun` and, after a one-click install, the

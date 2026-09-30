@@ -13,6 +13,7 @@ A mouse-and-keyboard stand-in for the BIMOS player, so active ragdoll NPCs can b
 | F | short-range stab test |
 | G | grenade at the crosshair |
 | V | throw a knife: it sticks in NPCs and walls (`BladeWeapon`) |
+| B | snap the bone under the crosshair (arm, leg or neck) |
 | hold Q / E | twist / pull on the stuck knife under the crosshair (3 N·m / 250 N) |
 | K / R | kill all NPCs / respawn all NPCs |
 | T | toggle 0.25× slow motion |
