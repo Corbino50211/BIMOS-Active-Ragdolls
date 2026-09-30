@@ -58,6 +58,12 @@ namespace ActiveRagdoll
             [Min(0f)] public float velocitySmoothing = 12f;
             [Tooltip("Largest height difference (m) a single step may climb or drop.")]
             [Min(0f)] public float maxStepUp = 0.35f;
+            [Tooltip("How hard a swinging foot is pulled along its step arc (0..1). Joint muscles alone can't swing the foot fast enough against the body's momentum, so the toes catch and drag behind. This carries the foot to where it should land.")]
+            [Range(0f, 1f)] public float swingFootPin = 0.8f;
+            [Tooltip("How hard a planted foot is held where it was placed (0..1). Stops it being dragged along behind the body. Low, so shoves still slide it.")]
+            [Range(0f, 1f)] public float plantedFootPin = 0.25f;
+            [Tooltip("Shin pull while swinging, as a fraction of Swing Foot Pin. Brings the knee through instead of trailing.")]
+            [Range(0f, 1f)] public float swingShinPin = 0.4f;
         }
 
         [Serializable]
@@ -107,6 +113,7 @@ namespace ActiveRagdoll
             public readonly LimbIK ik = new LimbIK();
             public Transform foot;
             public int footBone = -1;
+            public int shinBone = -1;
             public float lateral;
             public float ankleHeight;
             public Quaternion footRelToYaw = Quaternion.identity;
@@ -419,6 +426,7 @@ namespace ActiveRagdoll
                 Transform lower = TargetOf(BoneRoles.LowerLeg(side));
                 Transform foot = TargetOf(BoneRoles.Foot(side));
                 leg.footBone = character.GetBoneIndex(BoneRoles.Foot(side));
+                leg.shinBone = character.GetBoneIndex(BoneRoles.LowerLeg(side));
                 if (!leg.ik.Bind(upper, lower, foot, bindYawRot * Vector3.forward) || leg.footBone < 0)
                 {
                     _legsValid = false;
@@ -593,6 +601,7 @@ namespace ActiveRagdoll
             if (weight <= 0.001f)
             {
                 SyncFeetToBody(rootPos.y, headingYaw);
+                PinFeet(0f, false);
                 return;
             }
 
@@ -686,6 +695,33 @@ namespace ActiveRagdoll
 
             for (int s = 0; s < 2; s++)
                 SolveLeg(_legs[s], weight, headingYaw);
+
+            bool balanced = !hasBalance || balance.State != BalanceState.Lost;
+            PinFeet(balanced ? weight : 0f, grounded);
+        }
+
+        /// <summary>
+        /// Pulls the physical feet toward their gait targets: firmly while swinging (so they get where they're
+        /// going instead of dragging on their toes), lightly while planted. Off while airborne or falling.
+        /// </summary>
+        private void PinFeet(float weight, bool grounded)
+        {
+            if (_motors == null || !_motors.IsInitialized)
+                return;
+            for (int s = 0; s < 2; s++)
+            {
+                Leg leg = _legs[s];
+                if (leg == null)
+                    continue;
+                float foot = 0f, shin = 0f;
+                if (grounded && weight > 0f)
+                {
+                    foot = weight * (leg.swinging ? _gait.swingFootPin : _gait.plantedFootPin);
+                    shin = leg.swinging ? foot * _gait.swingShinPin : 0f;
+                }
+                if (leg.footBone >= 0) _motors.SetPinWeight(leg.footBone, foot);
+                if (leg.shinBone >= 0) _motors.SetPinWeight(leg.shinBone, shin);
+            }
         }
 
         private void BeginSwing(Leg leg, float duration, float rootY)

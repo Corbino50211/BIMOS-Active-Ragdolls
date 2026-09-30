@@ -154,6 +154,12 @@ This follows BIMOS's `Feet` stepping model: feet stay planted in the world and s
 quadratic-Bezier arc when they fall too far from a target that leads the measured velocity. Recovery steps happen
 because the target shifts toward the capture point.
 
+**Foot pins:** joint muscles alone can't swing a foot forward fast enough against the body's momentum, so the
+toes catch the ground and the legs trail behind on tiptoe. The gait therefore pulls each physical foot toward its
+target, using the same capped pin as strike assist (14 rad/s, at most 80 m/s² × weight). The pull is firm while the
+foot swings, with the shin brought through too, and light while it's planted, so shoves still slide it. Pins are off
+while airborne or once balance is lost. Set both to 0 for pure joint-driven legs.
+
 **Stride:** feet land ahead of the hips by *Lead Time + Overshoot Time* of the measured velocity. They then stay
 planted until the body has carried them *Stride Symmetry* × as far behind, so the step threshold grows with speed.
 At walking speed (1.3 m/s) a foot lands about 0.39 m ahead, lifts about 0.33 m behind, and the stride is about 1.1 m.
@@ -169,6 +175,7 @@ raise it.
 | Lead time | 0.18 s of velocity |
 | Overshoot time | +0.10 s of velocity (capped at 0.5 × leg length) |
 | Stride symmetry | 0.85 |
+| Swing / planted foot pin | 0.8 / 0.25 (shin 0.4 × swing while swinging) |
 | Capture point gain | 0.8 |
 | Max step reach | 0.75 × leg length |
 | Max step up/down | 0.35 m |
