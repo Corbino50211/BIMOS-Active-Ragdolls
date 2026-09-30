@@ -99,6 +99,29 @@ namespace ActiveRagdoll
         }
 
         [Serializable]
+        public sealed class WalkMotionSettings
+        {
+            [Tooltip("Arms swing opposite the legs: hand travel as a fraction of the opposite foot's travel. 0 = arms hang still.")]
+            [Range(0f, 1.5f)] public float armSwing = 0.5f;
+            [Tooltip("Largest arm swing, in arm lengths.")]
+            [Range(0f, 0.6f)] public float maxArmSwing = 0.3f;
+            [Tooltip("Share of the arm swing kept with the guard up.")]
+            [Range(0f, 1f)] public float guardArmSwing = 0.25f;
+            [Tooltip("How far (m) the hips dip when the feet are furthest apart, rising again over the planted foot.")]
+            [Range(0f, 0.1f)] public float pelvisBob = 0.03f;
+            [Tooltip("How far (m) the hips shift over the planted foot while the other one swings.")]
+            [Range(0f, 0.1f)] public float pelvisSway = 0.025f;
+            [Tooltip("Hip rotation (degrees) with the stride: the forward leg's hip leads.")]
+            [Range(0f, 20f)] public float pelvisTwist = 7f;
+            [Tooltip("How much the chest turns back against the hip rotation (1 = shoulders square, >1 = shoulders counter-rotate).")]
+            [Range(0f, 2f)] public float chestCounterTwist = 1.4f;
+            [Tooltip("Toes lift (degrees) as the heel strikes.")]
+            [Range(0f, 40f)] public float heelStrike = 12f;
+            [Tooltip("Toes point down (degrees) as the foot pushes off.")]
+            [Range(0f, 40f)] public float toeOff = 18f;
+        }
+
+        [Serializable]
         public sealed class LookSettings
         {
             [Range(0f, 120f)] public float maxYaw = 75f;
@@ -134,6 +157,7 @@ namespace ActiveRagdoll
 
             public Vector3 current;
             public float currentYaw;
+            public float currentPitch;
             public Vector3 currentNormal = Vector3.up;
             public Vector3 ideal;
             public float idealYaw;
@@ -159,6 +183,8 @@ namespace ActiveRagdoll
         [SerializeField] private GaitSettings _gait = new GaitSettings();
         [SerializeField] private ArmSettings _arms = new ArmSettings();
         [SerializeField] private SpineSettings _spine = new SpineSettings();
+        [Tooltip("Secondary walking motion: arm swing, hip bob, sway and twist, heel-to-toe roll. All scale with walking speed.")]
+        [SerializeField] private WalkMotionSettings _walkMotion = new WalkMotionSettings();
         [SerializeField] private LookSettings _look = new LookSettings();
 
         [Header("Events")]
@@ -178,6 +204,11 @@ namespace ActiveRagdoll
         private float _legLength = 0.9f;
         private int _lastStepped = -1;
         private Vector3 _smoothedVelocity;
+        private float _walkAmount;
+        private readonly float[] _footForward = new float[2];
+        private float _walkBob;
+        private float _walkSway;
+        private float _walkTwist;
         private float _speed;
         private float _guard;
         private float _swayPhase;
@@ -503,7 +534,8 @@ namespace ActiveRagdoll
             AdvanceStrike(dt);
             UpdateFlinch(dt);
 
-            ApplyPelvisOffset();
+            ComputeWalkMotion(profile, yawRot);
+            ApplyPelvisOffset(yawRot);
             if (_proceduralSpine)
                 ApplySpine(profile, yawRot);
             if (_headLook)
@@ -518,13 +550,68 @@ namespace ActiveRagdoll
 
         // ------------------------------------------------------------------ Pelvis & spine
 
-        private void ApplyPelvisOffset()
+        private void ApplyPelvisOffset(Quaternion yawRot)
         {
-            if (_pelvisT == null || Mathf.Abs(_pelvisHeightOffset) < 1e-4f)
+            if (_pelvisT == null)
                 return;
             float standing = _character.StandingPelvisHeight;
-            float offset = Mathf.Max(_pelvisHeightOffset, -standing * (1f - _spine.minCrouchRatio));
-            _pelvisT.position += Vector3.up * offset;
+            float offset = Mathf.Max(_pelvisHeightOffset, -standing * (1f - _spine.minCrouchRatio)) + _walkBob;
+            Vector3 shift = Vector3.up * offset + yawRot * Vector3.right * _walkSway;
+            if (shift.sqrMagnitude > 1e-8f)
+                _pelvisT.position += shift;
+
+            if (Mathf.Abs(_walkTwist) > 0.01f)
+            {
+                // Hips turn with the stride; the spine turns back so the shoulders counter-rotate.
+                _pelvisT.rotation = Quaternion.AngleAxis(_walkTwist, Vector3.up) * _pelvisT.rotation;
+                if (_spineT != null)
+                    _spineT.rotation = Quaternion.AngleAxis(-_walkTwist * _walkMotion.chestCounterTwist, Vector3.up) * _spineT.rotation;
+            }
+        }
+
+        /// <summary>
+        /// Secondary walking motion from where the feet are (last frame's gait): how far each foot is ahead of
+        /// the other drives arm swing and hip twist, their spread drives the hip bob, and the swinging leg
+        /// shifts the hips over the planted one. Everything scales with walking speed, so standing is still.
+        /// </summary>
+        private void ComputeWalkMotion(in RagdollProfile profile, Quaternion yawRot)
+        {
+            _walkBob = _walkSway = _walkTwist = 0f;
+            _footForward[0] = _footForward[1] = 0f;
+            if (!_proceduralLegs || !_legsValid || _legs[0] == null || _legs[1] == null)
+            {
+                _walkAmount = 0f;
+                return;
+            }
+
+            LocomotionController locomotion = _character.Locomotion;
+            float walkSpeed = locomotion != null ? Mathf.Max(0.3f, locomotion.WalkSpeed) : 1.3f;
+            _walkAmount = profile.gaitWeight * Mathf.Clamp01(_speed / walkSpeed);
+            if (_walkAmount <= 0.001f)
+                return;
+
+            Vector3 root = _character.AnimatedRoot.position;
+            Vector3 forward = yawRot * Vector3.forward;
+            float left = Vector3.Dot(_legs[0].current - root, forward);
+            float right = Vector3.Dot(_legs[1].current - root, forward);
+            float mid = (left + right) * 0.5f;
+            _footForward[0] = left - mid;
+            _footForward[1] = right - mid;
+
+            float stride = Mathf.Max(0.1f, _legLength * 0.9f);
+            float spread = Mathf.Clamp01(Mathf.Abs(left - right) / stride);
+            _walkBob = -_walkMotion.pelvisBob * spread * _walkAmount;
+            _walkTwist = -_walkMotion.pelvisTwist * Mathf.Clamp((right - left) / stride, -1f, 1f) * _walkAmount;
+
+            for (int s = 0; s < 2; s++)
+            {
+                Leg leg = _legs[s];
+                if (!leg.swinging)
+                    continue;
+                // Over the planted (other) foot, most at mid-swing.
+                float toward = BoneRoles.Sign(_legs[1 - s].side);
+                _walkSway = _walkMotion.pelvisSway * Mathf.Sin(Mathf.PI * Mathf.Clamp01(leg.swingT)) * toward * _walkAmount;
+            }
         }
 
         private void UpdateFlinch(float dt)
@@ -689,6 +776,7 @@ namespace ActiveRagdoll
                         leg.current = leg.planted;
                         leg.currentYaw = leg.plantedYaw;
                         leg.currentNormal = leg.plantedNormal;
+                        leg.currentPitch = Mathf.MoveTowards(leg.currentPitch, 0f, dt * 150f); // foot rolls flat
                     }
                 }
             }
@@ -760,6 +848,13 @@ namespace ActiveRagdoll
             Vector3 control = (leg.swingStart + target) * 0.5f + Vector3.up * (height * 2f);
             leg.current = RagdollMath.QuadraticBezier(leg.swingStart, control, target, t);
             leg.currentYaw = Mathf.LerpAngle(leg.swingStartYaw, leg.idealYaw, t);
+            // Heel-to-toe: toes point down as the foot pushes off, lift as the heel comes down.
+            float pitch = 0f;
+            if (t < 0.4f)
+                pitch = -_walkMotion.toeOff * Mathf.Sin(Mathf.PI * t / 0.4f);
+            else if (t > 0.6f)
+                pitch = _walkMotion.heelStrike * Mathf.Sin(Mathf.PI * 0.5f * (t - 0.6f) / 0.4f);
+            leg.currentPitch = pitch * _walkAmount;
             leg.currentNormal = Vector3.Slerp(leg.swingStartNormal, leg.targetNormal, t);
 
             if (leg.swingT >= 1f)
@@ -793,7 +888,9 @@ namespace ActiveRagdoll
         private void SolveLeg(Leg leg, float weight, float headingYaw)
         {
             Vector3 ankle = leg.current + leg.currentNormal * leg.ankleHeight;
-            Quaternion footRotation = Quaternion.FromToRotation(Vector3.up, leg.currentNormal) * RagdollMath.YawRotation(leg.currentYaw) * leg.footRelToYaw;
+            Quaternion yaw = RagdollMath.YawRotation(leg.currentYaw);
+            Quaternion roll = Mathf.Abs(leg.currentPitch) > 0.01f ? Quaternion.AngleAxis(-leg.currentPitch, yaw * Vector3.right) : Quaternion.identity;
+            Quaternion footRotation = Quaternion.FromToRotation(Vector3.up, leg.currentNormal) * roll * yaw * leg.footRelToYaw;
             if (weight < 0.999f)
                 ankle = Vector3.Lerp(leg.foot.position, ankle, weight);
 
@@ -840,6 +937,14 @@ namespace ActiveRagdoll
                     + new Vector3(0f, Mathf.Sin(phase), Mathf.Cos(phase * 0.7f)) * _arms.swayAmplitude);
 
                 Vector3 target = Vector3.Lerp(relaxed, guard, _guard);
+                if (_walkAmount > 0.001f && _walkMotion.armSwing > 0f)
+                {
+                    // Opposite the same-side leg: right arm forward as the right foot goes back.
+                    float swing = -_footForward[arm.side == BodySide.Left ? 0 : 1] * _walkMotion.armSwing;
+                    swing = Mathf.Clamp(swing, -_walkMotion.maxArmSwing * length, _walkMotion.maxArmSwing * length)
+                        * Mathf.Lerp(1f, _walkMotion.guardArmSwing, _guard);
+                    target += yawRot * new Vector3(0f, Mathf.Max(0f, swing) * 0.35f, swing);
+                }
                 Vector3 hint = yawRot * Mirror(_arms.elbowHint, sx);
                 bool striking = _strike != null && _strikeSide == arm.side;
                 bool aiming = !striking && _armAim[s];

@@ -154,6 +154,20 @@ This follows BIMOS's `Feet` stepping model: feet stay planted in the world and s
 quadratic-Bezier arc when they fall too far from a target that leads the measured velocity. Recovery steps happen
 because the target shifts toward the capture point.
 
+**Walk motion** (`ProceduralAnimator → Walk Motion`) is what stops the walk looking stiff. All of it scales with
+walking speed, so a standing NPC stays still.
+
+- **Arm swing (0.5):** each arm swings opposite its same-side leg, capped at 0.3 arm lengths. 25% of the swing is
+  kept with the guard up.
+- **Hip bob (0.03 m):** the hips are lowest with the feet furthest apart and rise over the planted foot.
+- **Hip sway (0.025 m):** the hips shift over the planted foot while the other foot swings.
+- **Hip twist (7°):** the forward leg's hip leads, and the chest turns back 1.4× as much, so the shoulders
+  counter-rotate.
+- **Heel-to-toe roll:** the toes point down 18° as the foot pushes off, lift 12° as the heel strikes, then roll
+  flat.
+
+Set any of them to 0 to remove that motion.
+
 **Foot pins:** joint muscles alone can't swing a foot forward fast enough against the body's momentum, so the
 toes catch the ground and the legs trail behind on tiptoe. The gait therefore pulls each physical foot toward its
 target, using the same capped pin as strike assist (14 rad/s, at most 80 m/s² × weight). The pull is firm while the
