@@ -153,12 +153,21 @@ This follows BIMOS's `Feet` stepping model: feet stay planted in the world and s
 quadratic-Bezier arc when they fall too far from a target that leads the measured velocity. Recovery steps happen
 because the target shifts toward the capture point.
 
+**Stride:** feet land ahead of the hips by *Lead Time + Overshoot Time* of the measured velocity. They then stay
+planted until the body has carried them *Stride Symmetry* × as far behind, so the step threshold grows with speed.
+At walking speed (1.3 m/s) a foot lands about 0.39 m ahead, lifts about 0.33 m behind, and the stride is about 1.1 m.
+That's a heel-to-toe walk rather than a shuffle under the body. Setting *Overshoot Time* and *Stride Symmetry* to 0
+restores the old gait exactly. If the NPC over-strides and stumbles, lower *Overshoot Time*; if it still shuffles,
+raise it.
+
 | Field | Default |
 |---|---|
 | Idle / moving step threshold | 0.10 / 0.20 m (halved at full urgency) |
 | Slow / fast step duration | 0.34 / 0.20 s |
 | Step height | 0.07 m + 0.035 × speed (max 0.18) |
 | Lead time | 0.18 s of velocity |
+| Overshoot time | +0.10 s of velocity (capped at 0.5 × leg length) |
+| Stride symmetry | 0.85 |
 | Capture point gain | 0.8 |
 | Max step reach | 0.75 × leg length |
 | Max step up/down | 0.35 m |

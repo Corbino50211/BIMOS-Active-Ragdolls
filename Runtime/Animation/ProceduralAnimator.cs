@@ -40,6 +40,12 @@ namespace ActiveRagdoll
             [Min(0f)] public float maxStepHeight = 0.18f;
             [Tooltip("How far ahead (s of measured velocity) foot targets lead the body.")]
             [Min(0f)] public float leadTime = 0.18f;
+            [Tooltip("Extra seconds of velocity feet overshoot by when they land, on top of Lead Time. Longer, more natural strides instead of shuffling. 0 = off.")]
+            [Min(0f)] public float overshootTime = 0.1f;
+            [Tooltip("A planted foot stays down until it's this fraction as far behind the hips as it landed in front of them (0..1). 0 = step as soon as the foot drifts by the step threshold (the old shuffle).")]
+            [Range(0f, 1f)] public float strideSymmetry = 0.85f;
+            [Tooltip("Largest landing overshoot, as a fraction of leg length (keeps running strides reachable).")]
+            [Range(0.1f, 1f)] public float maxOvershoot = 0.5f;
             [Tooltip("How strongly foot targets move toward the capture point when the body is off balance.")]
             [Min(0f)] public float capturePointGain = 0.8f;
             [Tooltip("Maximum horizontal step reach from the hip, as a fraction of leg length.")]
@@ -610,7 +616,12 @@ namespace ActiveRagdoll
             float walkSpeed = locomotion != null ? Mathf.Max(0.1f, locomotion.WalkSpeed) : 1.3f;
             float runSpeed = locomotion != null ? Mathf.Max(walkSpeed, locomotion.RunSpeed) : 3f;
 
-            Vector3 lead = _smoothedVelocity * _gait.leadTime;
+            // Feet land ahead of the hips by the lead plus an overshoot that grows with speed, and (below)
+            // stay planted until the body has carried them about as far behind. Stride length then scales with
+            // velocity like a real walk (Raibert-style placement) instead of short shuffles under the body.
+            Vector3 lead = Vector3.ClampMagnitude(_smoothedVelocity * (_gait.leadTime + _gait.overshootTime),
+                Mathf.Max(_legLength * _gait.maxOvershoot, _speed * _gait.leadTime)); // the cap never cuts into the plain lead
+            float strideThreshold = lead.magnitude * (1f + _gait.strideSymmetry);
             for (int s = 0; s < 2; s++)
             {
                 Leg leg = _legs[s];
@@ -637,6 +648,8 @@ namespace ActiveRagdoll
                 if (!_legs[0].swinging && !_legs[1].swinging)
                 {
                     float threshold = Mathf.Lerp(_gait.idleStepThreshold, _gait.movingStepThreshold, Mathf.Clamp01(_speed / walkSpeed));
+                    if (_gait.strideSymmetry > 0f)
+                        threshold = Mathf.Max(threshold, strideThreshold);
                     threshold *= Mathf.Lerp(1f, 0.5f, urgency);
                     for (int s = 0; s < 2; s++)
                     {
