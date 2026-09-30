@@ -73,6 +73,10 @@ namespace ActiveRagdoll
         [Tooltip("How fast (per second) a muscle loses strength. High, so hits and grabs take effect at once.")]
         [SerializeField, Min(0.1f)] private float _strengthLossRate = 20f;
 
+        [Header("Legs")]
+        [Tooltip("Aim thighs and feet in world space instead of relative to the pelvis (0..1). When the pelvis tips forward while walking, the hips still swing the legs under the body and the feet stay flat, instead of the whole leg rotating backward onto tiptoes. The reaction pushes the pelvis back upright, like real hip muscles. 0 = the old pelvis-relative legs.")]
+        [SerializeField, Range(0f, 1f)] private float _worldSpaceLegs = 1f;
+
         [Header("External Control")]
         [Tooltip("Strength multiplier for a limb that is being held (e.g. grabbed by a BIMOS hand), so the player can move it.")]
         [SerializeField, Range(0f, 1f)] private float _grabbedStrength = 0.25f;
@@ -99,6 +103,7 @@ namespace ActiveRagdoll
         private bool[] _grabbed = Array.Empty<bool>();
         private int[] _holds = Array.Empty<int>();
         private int[] _limb = Array.Empty<int>();
+        private bool[] _worldAligned = Array.Empty<bool>();
         private int _grabbedLimbMask;
         private bool _initialized;
 
@@ -241,6 +246,7 @@ namespace ActiveRagdoll
             _grabbed = new bool[n];
             _holds = new int[n];
             _limb = new int[n];
+            _worldAligned = new bool[n];
 
             var stack = new int[n];
             for (int i = 0; i < n; i++)
@@ -251,6 +257,8 @@ namespace ActiveRagdoll
                 _appliedSpring[i] = -1f;
                 _strength[i] = -1f;
                 _limb[i] = BoneRoles.GetLimbId(b.role);
+                _worldAligned[i] = b.role == BoneRole.LeftUpperLeg || b.role == BoneRole.RightUpperLeg
+                    || b.role == BoneRole.LeftFoot || b.role == BoneRole.RightFoot;
                 if (b.joint == null || b.parentIndex < 0)
                     continue;
                 Vector3 pivot = b.joint.transform.TransformPoint(b.joint.anchor);
@@ -290,6 +298,7 @@ namespace ActiveRagdoll
             float muscle = profile.muscleStrength;
             bool dead = _character.IsDead;
             float painDecay = _painRecoveryRate * dt;
+            float worldLegs = dead ? 0f : WorldLegWeight(bones, profile);
 
             for (int i = 0; i < bones.Count; i++)
             {
@@ -325,13 +334,44 @@ namespace ActiveRagdoll
 
                     // Leave the target alone at zero strength so a relaxed corpse can fall asleep.
                     if (spring > 1e-5f)
-                        joint.targetRotation = RagdollMath.JointTargetRotation(b.jointSpace, b.jointSpaceInverse, b.initialRelativeRotation, b.targetRelativeRotation);
+                    {
+                        Quaternion targetRelative = b.targetRelativeRotation;
+                        if (worldLegs > 0f && _worldAligned[i] && b.hasTarget)
+                        {
+                            // Relative to where the parent body actually is, not where the animation has it,
+                            // so the segment keeps its animated world orientation.
+                            RagdollBone parent = bones[b.parentIndex];
+                            if (parent.hasTarget && parent.body != null)
+                                targetRelative = Quaternion.Inverse(Quaternion.Slerp(parent.targetRotation, parent.body.rotation, worldLegs)) * b.targetRotation;
+                        }
+                        joint.targetRotation = RagdollMath.JointTargetRotation(b.jointSpace, b.jointSpaceInverse, b.initialRelativeRotation, targetRelative);
+                    }
                 }
 
                 float pin = _pinWeight[i];
                 if (pin > 0f && !dead && b.hasTarget && b.body != null)
                     ApplyPin(b, pin * Mathf.Min(1f, muscle));
             }
+        }
+
+        /// <summary>
+        /// How much the legs aim in world space this step: full while the gait drives them and the pelvis is
+        /// roughly where it should be, fading out as the body tips over (so a fallen NPC's legs don't try to
+        /// point at the floor through its own body).
+        /// </summary>
+        private float WorldLegWeight(System.Collections.Generic.List<RagdollBone> bones, in RagdollProfile profile)
+        {
+            if (_worldSpaceLegs <= 0f || profile.gaitWeight <= 0f)
+                return 0f;
+            int pelvisIndex = _character.PelvisIndex;
+            if (pelvisIndex < 0)
+                return 0f;
+            RagdollBone pelvis = bones[pelvisIndex];
+            if (pelvis.body == null || !pelvis.hasTarget)
+                return 0f;
+            float tilt = Quaternion.Angle(pelvis.body.rotation, pelvis.targetRotation);
+            float upright = 1f - Mathf.Clamp01((tilt - 30f) / 30f);
+            return _worldSpaceLegs * profile.gaitWeight * upright;
         }
 
         private void ApplyDrive(int i, ConfigurableJoint joint, float spring, float damper, float maxTorque)

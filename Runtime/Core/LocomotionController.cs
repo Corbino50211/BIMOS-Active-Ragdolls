@@ -36,6 +36,9 @@ namespace ActiveRagdoll
         [Tooltip("Minimum support (feet on the ground) before propulsion is applied.")]
         [SerializeField, Range(0f, 1f)] private float _minSupport = 0.25f;
 
+        [Tooltip("Apply the walking force as if through the whole body's centre of mass. The force is pushed on the torso, above the centre of mass, which otherwise pitches the NPC forward and leaves the legs trailing. 0 = off (the old forward-tipping push), 1 = no tipping.")]
+        [SerializeField, Range(0f, 1f)] private float _propelThroughCenterOfMass = 1f;
+
         [Header("Turning")]
         [Tooltip("Degrees per second the heading turns toward the desired facing.")]
         [SerializeField, Min(0f)] private float _turnSpeed = 240f;
@@ -185,11 +188,29 @@ namespace ActiveRagdoll
                 return;
 
             var bones = _character.BonesInternal;
+            Vector3 com = hasBalance ? balance.CenterOfMass : _character.Pelvis.worldCenterOfMass;
+            Vector3 pitch = Vector3.zero;
             for (int k = 0; k < _torsoIndices.Length; k++)
             {
                 Rigidbody rb = bones[_torsoIndices[k]].body;
-                if (rb != null)
-                    rb.AddForce(totalForce * (rb.mass / _torsoMass), ForceMode.Force);
+                if (rb == null)
+                    continue;
+                Vector3 force = totalForce * (rb.mass / _torsoMass);
+                rb.AddForce(force, ForceMode.Force);
+                pitch += Vector3.Cross(rb.worldCenterOfMass - com, force);
+            }
+
+            // Cancel the turning moment of pushing above the centre of mass, so the push moves the body
+            // without tipping it (the legs and feet then stay under it).
+            if (_propelThroughCenterOfMass > 0f && RagdollMath.IsFinite(pitch))
+            {
+                Vector3 counter = -pitch * _propelThroughCenterOfMass;
+                for (int k = 0; k < _torsoIndices.Length; k++)
+                {
+                    Rigidbody rb = bones[_torsoIndices[k]].body;
+                    if (rb != null)
+                        rb.AddTorque(counter * (rb.mass / _torsoMass), ForceMode.Force);
+                }
             }
         }
 

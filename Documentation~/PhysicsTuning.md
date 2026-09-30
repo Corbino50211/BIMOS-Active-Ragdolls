@@ -90,6 +90,13 @@ which the muscle stops getting stronger. That last value is what makes NPCs push
 | Leg | 30 | 0.9 | 60° | hip k ≈ 2250, knee k ≈ 340 |
 | Foot | 24 | 0.9 | 45° | |
 
+**World-space legs** (*World Space Legs*, 1): thighs and feet aim at their animated world orientation, measured
+against where the pelvis and shins actually are rather than where the animation has them. When the pelvis tips
+forward, the hips still swing the legs under the body and the feet stay flat. Without this the whole leg rotates
+backward with the pelvis, so the feet trail behind and point down onto the toes. The reaction torque pushes the
+pelvis back upright, as real hip muscles do. It fades out between 30° and 60° of pelvis error, so a fallen NPC's
+legs don't try to point through the floor. 0 = the old pelvis-relative legs.
+
 **Strength changes are rate-limited:** a muscle loses strength at up to 20/s, so hits and grabs take effect at once. It
 regains strength at up to 4/s (*Strength Recovery Rate*), so a released limb eases back into pose over about a
 quarter second instead of snapping. The strike boost is applied on top, unsmoothed, so punches stay instant.
@@ -146,6 +153,7 @@ is a capture-point error that ignores motion the NPC is doing on purpose.
 | Setpoint Acceleration / Deceleration | 2.5 / 3.5 m/s² | How fast the commanded velocity ramps. Tracking lag (ramp ÷ gain) feeds the balance error, so keep ramp ÷ gain ≲ 0.6 m/s or walking starts will read as stumbles. |
 | Turn Speed | 240°/s | Heading turn rate. The upright torque makes the body follow. |
 | Max Heading Lead | 100° | How far the heading may lead the body. |
+| Propel Through Center Of Mass | 1 | The force is pushed on the torso, which sits above the centre of mass, so on its own it pitches the NPC forward and the legs trail. A matching counter-torque cancels that turning, so the push moves the body without tipping it. 0 = the old forward-tipping push. |
 
 ## 6. Gait (`ProceduralAnimator → Gait`)
 
