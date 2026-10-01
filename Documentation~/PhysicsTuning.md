@@ -174,6 +174,12 @@ target, using the same capped pin as strike assist (14 rad/s, at most 80 m/s² �
 foot swings, with the shin brought through too, and light while it's planted, so shoves still slide it. Pins are off
 while airborne or once balance is lost. Set both to 0 for pure joint-driven legs.
 
+**Predictive stepping** (as in BIMOS's `Feet`): a foot is judged against where it would land if it stepped now and
+the body kept moving at its current velocity (target + velocity × step duration), not against where it should be
+this instant. Swinging feet keep re-aiming at target + velocity × the time left in the swing, so they land where
+the body will be, not where it was. When the NPC speeds up or turns, steps start in time instead of after the
+legs have been left behind. The threshold grows by the same travel, so a steady walk keeps its stride.
+
 **Stride:** feet land ahead of the hips by *Lead Time + Overshoot Time* of the measured velocity. They then stay
 planted until the body has carried them *Stride Symmetry* × as far behind, so the step threshold grows with speed.
 At walking speed (1.3 m/s) a foot lands about 0.39 m ahead, lifts about 0.33 m behind, and the stride is about 1.1 m.

@@ -747,21 +747,27 @@ namespace ActiveRagdoll
                     if (_gait.strideSymmetry > 0f)
                         threshold = Mathf.Max(threshold, strideThreshold);
                     threshold *= Mathf.Lerp(1f, 0.5f, urgency);
+
+                    // Judge each foot against where it would land if it stepped now and the body kept its
+                    // current velocity (as BIMOS's Feet does), not against where it should be this instant.
+                    // The step then starts in time to arrive, instead of after the body has already left the foot
+                    // behind. The threshold grows by the same travel, so a steady walk keeps its stride.
+                    float fastness = Mathf.Max(Mathf.Clamp01(_speed / runSpeed), urgency);
+                    float duration = Mathf.Lerp(_gait.slowStepDuration, _gait.fastStepDuration, fastness);
+                    Vector3 travel = _smoothedVelocity * duration;
+                    float predictedThreshold = threshold + travel.magnitude;
                     for (int s = 0; s < 2; s++)
                     {
                         Leg leg = _legs[s];
                         float yawError = Mathf.Abs(Mathf.DeltaAngle(leg.plantedYaw, leg.idealYaw)) / _gait.yawStepThreshold;
-                        leg.error = RagdollMath.Flatten(leg.planted - leg.ideal).magnitude + yawError * threshold;
+                        leg.error = RagdollMath.Flatten(leg.planted - (leg.ideal + travel)).magnitude + yawError * threshold;
                     }
 
                     int pick = _legs[0].error >= _legs[1].error ? 0 : 1;
-                    if (pick == _lastStepped && _legs[1 - pick].error > threshold * 0.6f)
+                    if (pick == _lastStepped && _legs[1 - pick].error > predictedThreshold * 0.6f)
                         pick = 1 - pick;
-                    if (_legs[pick].error > threshold)
-                    {
-                        float fastness = Mathf.Max(Mathf.Clamp01(_speed / runSpeed), urgency);
-                        BeginSwing(_legs[pick], Mathf.Lerp(_gait.slowStepDuration, _gait.fastStepDuration, fastness), rootPos.y);
-                    }
+                    if (_legs[pick].error > predictedThreshold)
+                        BeginSwing(_legs[pick], duration, rootPos.y);
                 }
 
                 for (int s = 0; s < 2; s++)
@@ -821,7 +827,8 @@ namespace ActiveRagdoll
             leg.swingStartYaw = leg.plantedYaw;
             leg.swingStartNormal = leg.plantedNormal;
             leg.midProbeDone = false;
-            ProbeGround(leg.ideal, rootY, out leg.targetGroundY, out leg.targetNormal);
+            // Probe where the foot will actually land, not where the target is now.
+            ProbeGround(leg.ideal + _smoothedVelocity * leg.swingDuration, rootY, out leg.targetGroundY, out leg.targetNormal);
         }
 
         private void AdvanceSwing(Leg leg, int legIndex, float dt, float rootY)
